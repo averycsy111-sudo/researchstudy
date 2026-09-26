@@ -1,6 +1,6 @@
 # 向量数据库与 Embedding 检索笔记
 
-> 说明：纯 Markdown，**无 LaTeX 公式**，普通 Markdown 渲染器直接查看，层级序号规整，去掉 `_` 数学模式报错问题。
+> 原文链接：https://zhuanlan.zhihu.com/p/27399676042
 
 ## 1. 如何把原始数据嵌入为向量
 
