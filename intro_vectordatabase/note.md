@@ -1,6 +1,6 @@
 # 向量数据库与 Embedding 检索笔记
 
-> 原文链接：https://zhuanlan.zhihu.com/p/27399676042
+> 原文链接：https://zhuanlan.zhihu.com/p/27399676042，https://medium.com/@myscale/understanding-vector-indexing-a-comprehensive-guide-d1abe36ccd3c
 
 ## 1. 如何把原始数据嵌入为向量
 
@@ -136,6 +136,10 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 
 ## 3. 索引技术
 
+> Note:
+> 1. **原始向量在底层存储本身是没有语义顺序的**，存放顺序一般就是插入的先后顺序，是无序的。
+> 2. **索引是单独额外构建出来的一套导航结构**。索引不会改动原始向量的物理存放位置，索引记录的是：向量 ID、簇归属、节点连接关系（HNSW）等元信息，用来**跳过大量不需要比对的向量**。
+
 ### 3.1 扁平索引：最简单的索引
 
 > 扁平索引之所以被称为“扁平”，是因为我们不会对输入的向量进行任何修改。由于不对向量进行近似或聚类，这些索引能产生最准确的结果。我们能获得完美的搜索质量，但这是以显著的搜索时间为代价的。
@@ -188,6 +192,15 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
    对于任意原始子向量，不存浮点数，只保存离它最近的聚类中心的编号（索引）。
 
    → 向量之间的区分能力下降，空间里点的重叠变多，计算相似度的时候会出现误差 → 搜索召回 / 准确率下降。
+
+#### 3.2.3 标量量化 Scalar Quantization, SQ
+
+- 拆分方式：按维度单独拆，每一维独立量化
+- 划分依据：预先划定数值区间
+- 子单元：单个数字（标量，1 维）
+- 编码：每一维看落在哪个区间，输出区间编号
+- 缺点：高维效果很差，因为独立逐维划分忽略维度之间的相关性，适合处理低维数据
+- 优点：float被压缩为int，大幅减少内存占用且整数运算比浮点运算快
 
 ---
 
@@ -377,22 +390,6 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 1. **建索引**：将所有向量聚类，每个向量归属距离最近的簇；索引保存簇中心，同时记录每个簇内部包含哪些向量。
 2. **查询阶段**：先计算查询向量和各个簇中心的距离，挑选距离最近的少数几个簇；只在选中簇的内部向量中做相似度检索，直接跳过其他全部簇，缩小搜索空间，加快检索速度。
 
-#### 3.6.1 倒排文件（IVF）索引
-
-> 倒排文件索引（IVF）通过聚类来缩小搜索范围。它是一种非常受欢迎的索引，因为它易于使用，具有较高的搜索质量和合理的搜索速度。
->
-> 它基于 Voronoi 图的概念，也称为 Dirichlet 镶嵌。
->
-> 为了理解 Voronoi 图，我们需要想象将高维向量放置在二维空间中。然后在二维空间中放置一些额外的点，这些点将成为我们的“聚类”（在我们的例子中是 Voronoi 单元）质心（仍然使用的 K-means）。
->
-> 然后，我们从每个质心向外扩展相同的半径。在某个时刻，每个单元圆的圆周会与另一个圆周碰撞，从而形成单元边界：
->
-> 现在，每个数据点都将包含在一个单元内，并被分配给相应的质心。
->
-> 但是，如果查询向量落在单元的边缘附近，就会出现一个问题：它最接近的其他数据点很可能包含在相邻的单元中。我们称之为边缘问题：
->
-> 为了缓解这个问题并提高搜索质量，我们可以增加一个名为 nprobe 的值的索引参数。通过 nprobe，我们可以设置要搜索的单元数量。
-
 **聚类算法：**
 
 ##### ① K-means
@@ -427,6 +424,43 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 
 ---
 
+
+#### 3.6.1 倒排文件（IVF）索引
+
+> 倒排文件索引（IVF）通过聚类来缩小搜索范围。它是一种非常受欢迎的索引，因为它易于使用，具有较高的搜索质量和合理的搜索速度。
+>
+> 它基于 Voronoi 图的概念，也称为 Dirichlet 镶嵌。
+>
+> 为了理解 Voronoi 图，我们需要想象将高维向量放置在二维空间中。然后在二维空间中放置一些额外的点，这些点将成为我们的“聚类”（在我们的例子中是 Voronoi 单元）质心（仍然使用的 K-means）。
+>
+> 然后，我们从每个质心向外扩展相同的半径。在某个时刻，每个单元圆的圆周会与另一个圆周碰撞，从而形成单元边界：
+>
+> 现在，每个数据点都将包含在一个单元内，并被分配给相应的质心。
+>
+> 但是，如果查询向量落在单元的边缘附近，就会出现一个问题：它最接近的其他数据点很可能包含在相邻的单元中。我们称之为边缘问题：
+>
+> 为了缓解这个问题并提高搜索质量，我们可以增加一个名为 nprobe 的值的索引参数。通过 nprobe，我们可以设置要搜索的单元数量。
+
+
+### 3.6.2 IVF的多种变体
+
+① IVFFLAT
+> IVFFLAT is a simpler form of IVF. It partitions the dataset into clusters. However, within each cluster, it uses a flat structure (hence the name “FLAT”) for storing the vectors. IVFFLAT is designed to optimize the balance between search speed and accuracy.
+
+即最简单的IVF，选出与查询向量距离最近的nprobe个中心，然后在对应的簇内部暴力历遍与查询项链的距离。
+
+② IVFPQ
+
+> IVFPQ is an advanced variant of IVF, which stands for Inverted File with Product Quantization. It also splits the data into clusters but each vector in a cluster is broken down into smaller vectors, and each part is encoded or compressed into a limited number of bits using product quantization.
+
+对库内所有向量，提前做 PQ 乘积量化压缩，在选中的这 nprobe 簇里面，拿 PQ 编码做近似距离计算，根据估算距离排序，返回 TopK 候选。
+
+③ IVFSQ
+
+> In IVFSQ, each vector in a cluster is passed through scalar quantization. This means that each dimension of the vector is handled separately.
+> In simple terms, for every dimension of a vector, we set a predefined value or range. These values or ranges help decide which cluster a vector belongs to. Each component of the vector is then matched against these predefined values to find its place in a cluster. This method of breaking down and quantizing each dimension separately makes the process more straightforward. It’s especially useful for lower-dimensional data, as it simplifies encoding and reduces the space needed for storage.
+
+
 ### 3.7 基于图的方法
 
 > 基于图的方法在准确性和速度之间取得了较好的平衡。它们对高维数据很有效，并且可以提供高质量的搜索结果。但是，由于需要存储图结构，它们可能会占用大量内存，而且图的构建在计算上也很昂贵。
@@ -438,11 +472,71 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 
 #### 3.7.1 分层可导航小世界图（HNSW）
 
-> HNSW 创建一个分层的树状结构，树的每个节点代表一组向量。节点之间的边表示向量之间的相似性。该算法首先创建一组节点，每个节点包含少量向量。这可以通过随机方式或使用像 k-means 这样的聚类算法来完成，其中每个聚类成为一个节点。
->
-> 然后，算法检查每个节点的向量，并在该节点和包含与它最相似向量的节点之间绘制一条边。
->
-> 当我们查询 HNSW 索引时，它会使用这个图在树中导航，访问最有可能包含与查询向量最接近的向量的节点。
+> Its graph-like structure takes inspiration from two different techniques: the probability skip list and Navigable Small World (NSW).
+
+Skip List
+
+> A skip list is an advanced data structure that combines the advantages of two traditional structures: the quick insertion capability of a linked list and the rapid retrieval characteristic of an array. It achieves this through its multi-layer architecture where the data is organized across multiple layers, with each layer containing a subset of the data points.
+
+> Starting from the bottom layer, which contains all data points, each succeeding layer skips some points and thus has fewer data points, ultimately the topmost layer will have the smallest number of data points.
+To search for a data point in a skip list, we start from the highest layer and go from left to right exploring each data point. At any point, if the queried value is greater than the current datapoint, we move back to the previous datapoint in the layer below and resume the search from left to right until we locate the exact point.
+
+原生跳表存储一维标量 key，底层是完整有序链表，精细度从上往下递增。
+
+Navigable Small World (NSW)
+
+> Navigable Small World (NSW) is similar to a proximate graph where nodes are linked together based on how similar they are to each other. The greedy method is used to search for the nearest neighbor point.
+We always begin with a pre-defined entry point, which connects to multiple nearby nodes. We identify which of these nodes are the closest to our query vector and move there. This process iterates until there is no node closer to the query vector than the current one, serving as the stopping condition for the algorithm.
+
+Back to HNSW:
+
+> So, what happens in HNSW is that we take the motivation from the skip list, and it creates layers like the skip list. But for the connection between the data points, it makes a graph-like connection between the nodes. The nodes at each layer are connected not only to the current layer nodes but also to the nodes of the lower layers. The nodes at the top are very few and intensity increases when we go down to the lower layers. The last layer contains all the data points of the database.
+
+层级分配规则：
+
+每插入一条新向量，随机采样一个最大层数 max_level = floor(-ln(随机0~1小数) * mL)，mL=1/ln(M)
+- 概率是指数衰减：绝大多数向量只存在 Layer0；少数同时在中间层；顶层只有极少量节点（枢纽节点）
+
+跳表也是随机决定节点最高层。
+
+Note：如果一个节点分配最高层是 2，那它会同时存在 Layer0、Layer1、Layer2 这三层
+
+搜索逻辑：
+
+1. 从顶层入口点开始，在本层图上贪心遍历：不断跳到本层内离查询更近的邻居
+2. 直到当前节点的所有本层邻居，都没有比它离查询更近 → 局部极小
+3. 此时，才拿这个局部极小点作为入口，下降到下一层，重复贪心搜索
+
+### 3.7.3 HNSW的变体
+
+> In HNSWFLAT, the raw vectors are stored as they are, while in HNSWSQ, the vectors are stored in a quantized form. Apart from this key difference in data storage, the overall process and methodology of indexing and searching are the same in both HNSWFLAT and HNSWSQ.
+
+### 3.7.4 Multi-Scale Tree Graph (MSTG) Algorithm
+
+> Standard Inverted File Indexing (IVF) partitions a vector dataset into numerous clusters. However, a notable limitation is the substantial growth in index size for massive datasets, requiring the storage of many cluster representative vectors. The scalability of IVF is hindered by the significant memory overhead associated with this approach.
+> Multi-Stage Tree Graph (MSTG) is developed by MyScale and it overcomes this through a hierarchical design. Unlike IVF which has a single layer of cluster vectors, MSTG creates multiple layers, which means less persistent centroids in the memory. For example, if a dataset needs 10,000 cluster vectors in IVF, all 10,000 have to be stored, consuming substantial memory. In MSTG, using a 2-layer hierarchy of 100 clusters per layer, only 200 vectors need storage — the 100 top-layer vectors, and their 100 direct children.
+> MSTG combines the advantages of both tree and graph-based algorithms.
+
+依旧上疏下密（树状层级聚类）
+- **上层**：少量质心（训练的 k 小），代表全局大区域，覆盖范围很大，节点稀疏
+- **往下**：每个上层质心管辖的区域内，再做 K-means 分出子质心，不需要把全部子层的质心一次性加载进内存；子质心覆盖的空间更小、更精细，数量变多、分布变密，与HNSW不同不是原始数据
+
+- 单纯层次聚类树有个经典硬伤：
+检索的时候，一旦顶层选的分支选错了，目标向量在另一个子分支，就再也找不回来了 → 召回率暴跌。
+
+**MSTG 的改进：在最底层叶子节点里面维护一张近邻图。**
+
+1. **树部分（导航层，上层所有层级）**：多层 K-means 质心构成树，用来快速粗定位，把查询快速缩小到一小块空间。
+2. **图部分（叶子层）**：树的叶子节点里面存放原始向量，并且**这些原始向量之间构建近邻图**。
+   - 当顺着树落到叶子区域之后，不是只在这个叶子内部暴力遍历；
+   - 可以沿着图的边，**跨叶子做局部游走**，能跳到相邻叶子节点的向量，弥补树结构 “一旦走错分支就卡死” 的缺陷。
+  
+
+> It builds fast, searches fast, and remains fast and accurate under different filtered search ratios while being resource and cost-efficient.
+
+在高选择性过滤查询下（满足条件的向量只占数据集很小一部分），MSTG 的分层树聚类能快速剪枝大量不符合过滤条件的区域，这是它的亮点。
+
+而在无过滤、全库检索的情况下（最常规 KNN，不加任何 where 条件）：HNSW 高层长距离跳转，贪心直接逼近目标；MSTG 需要逐层和质心计算、逐层下探树分支，树导航的开销不一定占优。而且 MSTG 到底层之后，依然要跑局部近邻图，底层检索开销和 HNSW 接近。
 
 ---
 
