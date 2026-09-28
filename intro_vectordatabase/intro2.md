@@ -173,11 +173,89 @@ RNG 边筛选，需要大量两两向量距离计算，数据集大的时候建�
 
 HNSW = **FANNG 的 RNG 边筛选思想 + 多层分层导航**
 
+2.1.1 Basic Scores
+
+> Several similarity scores are commonly supported by VDBMSs
+> Similarity is often measured via distance in practice, with values closer to 0 indicating greater similarity. Distance functions obey the metric axioms of identity
+> Type	                      Score Metric	      Complexity	 Range
+  Sim.（Similarity 相似度）	 Inner Prod. 内积	         O(D)	      R（全体实数）
+  Sim.	                   Cosine 余弦相似度	         O(D)	      [−1,1]
+  Dist.（Distance 距离）	    Minkowski 闵可夫斯基距离	O(D)	      R+（非负实数）
+  Dist.	                   Mahalanobis 马氏距离	      O(D2+O(1))	R+
+  Dist.	                   Hamming 汉明距离	         O(D)	      N（自然数，0,1,2…）
+
+Definition 1 (Hamming) d(a, b) = P n i=1 δaibi
+
+> The Hamming distance counts the number of differing dimensions between vectors a and b
+
+Definition 2 (Inner Product) f(a, b) = P n i=1 aibi
+> Note：The dot product projects a onto b and scales the result by the magnitude of b. The scaling can lead to unintuitive consequences. For example, two large identical vectors have a larger dot product compared to two small identical vectors, thus they would be considered “more similar” under this definition. If magnitude is not important, a and b can be normalized by ˆa = a/∥a∥ and bˆ = b/∥b∥ so that they
+possess unit magnitudes.
+
+Definition 3 (Cosine Similarity) f(a, b) = ⟨ˆa, bˆ⟩or f(a, b) = ∥
+⟨
+a
+a
+∥∥
+,b
+b
+⟩
+∥
+
+Definition 4 (Minkowski) The p-order Minkowski
+distance is d(a, b) = (P n
+i=1 |ai − bi
+|
+p
+)
+1/p
+or d(a, b) = ∥a − b∥p
+
+Definition 5 (Mahalanobis) For any positive semidefinite matrix M, d(a, b) = p (a − b)⊤M(a − b).
+
+> Another generalization of Euclidean distance can be
+obtained by applying a linear transformation over the
+vector space in order to adjust the relative proximities
+of the feature vectors. The distance of two vectors in
+the transformed space can be calculated using the Mahalanobis formula.
+
+> Note: 闵可夫斯基距离是欧氏距离的广义形式；而马氏距离又是欧氏距离的另一种广义化思路，先对向量空间做线性变换，再在新空间上算欧氏距离
+> 
+> Aside from these basic scores, some VDBMSs also support aggregate scores for applications like multi-vector search [129]. There is also emerging work on learned scores [25,142,93], but these are not available in commercial systems
+
+2.1.2 Aggregate Scores
+
+**aggregate scores 聚合得分 + multi-vector search 多向量检索**
+ → 一个实体对应一组多个向量。
+> One way of approaching this problem is
+to use an aggregate score that defines how to combine
+individual scores f(x1, q). . . f(xm, q) to yield a single
+value that can be compared.
+
+例子：一张图片，拆成多个局部区域，每个区域提取一个向量；或者一段长文本，分成多个 chunk，得到一组向量。
+
+把这一组向量各自的相似度合并、聚合（比如取最大值、平均值、加权求和）得到一个最终分数，即聚合得分。
+
+2.1.3 Learned Scores
+
+**learned scores 学习型相似度得分**
+传统指标是固定数学公式，人工定义好的，不随数据分布自适应。而 learned scores：用机器学习模型自己学到的相似度度量。
+
+- 优点：适配特定任务，匹配效果往往更好
+- 缺点：计算开销大、推理慢，难以构建索引做 ANN 近似检索
 
 
+Curse of Dimensionality
 
+> When D grows beyond
+around 10 dimensions, and when the dimensions are
+independent and identically distributed, the Euclidean
+distances between the two farthest and two nearest vectors approach equality as the variance nears zero
 
+**大数定律**：
+D 越大，求和之后这个总和 \(\sum z_i^2\) 会越来越集中在它的期望值附近。
 
+→ **最近距离 ≈ 最远距离，距离之间差异几乎消失，方差→0**
 
 
 
