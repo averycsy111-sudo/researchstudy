@@ -253,9 +253,155 @@ independent and identically distributed, the Euclidean
 distances between the two farthest and two nearest vectors approach equality as the variance nears zero
 
 **大数定律**：
-D 越大，求和之后这个总和 \(\sum z_i^2\) 会越来越集中在它的期望值附近。
+独立同分布随机变量 \(Z_1,Z_2,\dots,Z_d\)：
 
-→ **最近距离 ≈ 最远距离，距离之间差异几乎消失，方差→0**
+\(\bar Z_d=\frac1d\sum_{i=1}^d Z_i \xrightarrow{P} \mathbb E[Z]\)
+
+样本均值收敛到期望。
+
+→ 当 \(d\to\infty\)：
+
+\(\frac1d\sum_{i=1}^d Z_i^2 \xrightarrow{P} \mathbb E[Z_i^2] = \text{常数}\)
+
+\(\|X-Y\|^2 \approx d\cdot \mathbb E[Z_i^2]\)
+两点之间距离平方，**几乎必然趋近于一个和 d 成正比的确定值**。
+
+> 证明：？
+
+方差分析\(\text{Var}(\|X-Y\|^2)=d\cdot C,\quad \text{Std}= \sqrt{dC}\)\(\frac{\text{Std}(\|X-Y\|^2)}{E[\|X-Y\|^2]} \propto \frac{1}{\sqrt{d}}\)
+
+即随着 d 增大，距离平方的相对波动以 \(1/\sqrt{d}\) 的速度趋于 0。
+
+> In a traditional data management system, data is manipulated directly. But in
+a VDBMSs, feature vectors are proxies for the actual
+entities, and they can be manipulated either directly or
+indirectly. An embedding model maps real-world entities
+(e.g. images) to feature vectors.
+
+> Under direct manipulation, users freely manipulate
+the values of the vectors, and maintaining the model
+is the responsibility of the user. This is the case for
+systems such as PASE [139] and pgvector [7].
+> For indirect manipulation, vectors are hidden from
+users. The vector collection appears as a collection of
+entities, not vectors, and users manipulate the entities.
+The VDBMS is responsible for the model（即embedding model）, which can
+be user-provided.
+
+> (c, k)-Search Queries. Most VDBMSs support “nearest neighbor” queries, where the aim is to retrieve vectors from S that are physical neighbors of q in the vector space. These queries may aim to return exact or
+approximate nearest neighbors, and may also specify
+the number of neighbors to return. We refer to these as
+(c, k)-search queries, where c indicates the approximation degree and k is the number of neighbors.
+> Out of these, most VDBMSs support the approximate
+k-nearest neighbors (ANN) query, which returns k vectors from S that are within a radius, centered over q, of
+c times the distance between q and its closest neighbor.
+
+> Note: 很多工程向量库是在索引构建阶段调参间接控制近似程度，而不是让用户在查询时直接传 c。这是理论层面对查询的形式化定义，不是工程 API 参数。
+> 确定性硬保证(任何数据集、查询，输出一定满足 \(dist \le c\cdot d^*\)),这类理论算法复杂度很高，工程向量库几乎不实现，只存在算法论文。
+
+eg.:
+
+1. 概率可证明保证:LSH
+
+LSH是 Indyk & Motwani 当年奠基 ANN 理论的算法，专门用来实现\((c,k)\) ANN。
+
+- 给定 c，只要哈希函数数量足够多，以很高概率返回满足 \(dist(q,p) \le c\cdot d^*\) 的候选点。不是 100% 一定成功（随机哈希带来的概率性），不是绝对硬性。
+- 缺点：
+  - 查询 / 建库开销大；
+  - 高维 embedding 场景召回、延迟表现不如 HNSW；
+  - FAiss 虽然实现了 LSH，但工业界向量数据库很少默认用它。
+
+👉 2. HNSW/IVF：没有任何可证明的数学界。
+
+HNSW:两个参数efConstructon,ef(efSearch)
+
+1. efConstruction：建索引时设置
+- 在建图过程中，每个节点插入时最多考察 `efConstruction` 个候选邻居,只能重建索引才能改
+- 影响上限：efConstruction 越大，图结构质量越好，能达到的最优 c越好
+  
+2. ef（efSearch）：查询阶段参数，每次 query 可以单独改，不改动索引
+- 检索时，优先队列最多维护 ef 个候选节点，沿着 HNSW 图搜索
+- ef 越大：搜索遍历更多候选，召回越好，近似因子 c 越接近 1；代价是查询更慢。
+- ef 越小：搜索跳的点少，速度快，但更容易漏掉真实近邻，c 变大
+
+类似的,IVF:两个参数nlist(聚类中心总数),nprobe(查找最近nprobe个聚类桶)
+
+即使 ef、nprobe 很大，依然存在某些查询，真实最近邻直接漏掉，返回点的距离远大于\(c\cdot d^*\)，只是经验上召回很好。
+
+3. 暴力精确 KNN（Flat），可以看成 c=1 的特例，返回严格真实最近邻：
+\(dist(q,p) \le 1\cdot d^*\)，c=1，绝对硬约束。代价：向量量大的时候查询极慢。
+
+> Range Queries. A range query is parameterized by a
+radius, r, instead of the number of neighbors to return
+
+> Predicated Search Queries. In a predicated search
+query, or “hybrid” query, each vector is associated with
+a set of attribute values, and a boolean predicate over
+these values must evaluate to true for each record in
+the result set
+> Batched Queries. For batched queries, a number of
+queries are revealed to the system at the same time,
+and the VDBMS can answer them in any order. These queries are especially suited to hardware accelerated query processing
+> Multi-Vector Queries. Some VDBMSs also support
+multi-vector search queries via aggregate scores. There are three possible sub-types: in multi-query
+single-feature (MQSF) queries, the query is represented
+by multiple vectors, and real-world entities are represented by single feature vectors; in multi-query multifeature (MQMF) queries, both the query and the entities are represented by multiple vectors; and in singlequery multi-feature (SQMF) queries, only the entities
+are represented by multiple vectors. But so far, there is
+support for MQSF and SQMF queries [11,5,12,125,13]
+but no support for MQMF queries.
+
+
+> Query Accuracy and Performance. The search capability of a VDBMS is assessed by evaluating query accuracy and performance.
+> To evaluate accuracy, precision and recall are often
+used. Precision is defined as the ratio between the number of relevant results in the result set over the size of
+the result set, and recall is defined as the ratio between
+the number of retrieved relevant results over all possible
+relevant results.
+> To evaluate performance, latency and throughput
+are used. Latency is the amount of time it takes for a
+VDBMS to answer a query once it is received, while
+throughput is the number of queries that are answered
+per unit time, often reported as queries per second.
+>
+> The modern belief is that even a fractional power of
+N query complexity cannot be obtained unless storage
+cost is worse than N O(1)DO(1)
+
+多项式存储 Polynomial Storage:存储量是 N 和 D 的多项式函数，记作 \(poly(N,D)=N^{O(1)}D^{O(1)}\)。
+
+HNSW / IVF可以通过细化索引,保留更多边/聚类中心来提高召回率,但这类索引仍然属于多项式存储,哪怕把它调得再精细，也无法拿到理论上的分数幂亚线性查询复杂度。只是工程平均速度变快，最坏情况依然可能接近 O (N)。
+
+> Instead, vector indexes speed up queries by minimizing the number of comparisons. This is achieved by
+partitioning S so that only a small subset is compared,
+and then arranging the partitions into data structures
+that can be easily traversed.
+> Unlike typical attributes, vectors are not obviously
+sortable nor can they be easily categorized. To achieve
+high accuracy, these indexes rely on novel techniques, which we refer to as randomization, learned partitioning, and navigable partitioning. The large physical size
+of vectors also leads to use of compression, namely a
+technique called quantization, as well as disk resident
+designs. Additionally, the need to support predicated
+queries has led to special hybrid operators for indexes
+> Partitioning Techniques.
+– Randomization. Randomization aims to exploit probability amplification of multiple independent events,
+allowing indexes to better discriminate truly similar
+vectors from dissimilar ones.
+– Learned Partitioning. Learning-based techniques aim
+to uncover an internal structure of S so that it can
+be partitioned along this structure. These techniques
+can be supervised or unsupervised.
+– Navigable Partitioning. Instead of fixating on absolute partitions, navigable indexes are designed so
+that different regions of S can be easily traversed.
+Some partitioning strategies are data independent, where
+the rules are the same for any data distribution. But
+the majority are data dependent. If updates to S alter its distribution, then indexes based on data dependent strategies may eventually become unbalanced over
+time. In many cases, this can only be resolved by rebuilding the index.
+> There are three basic structures: tables divide S into buckets containing similar
+vectors; trees are a nesting of tables; graphs connect
+similar vectors with virtual edges that can then be traversed.
+
+
+
 
 
 
