@@ -449,11 +449,47 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 
 即最简单的IVF，选出与查询向量距离最近的nprobe个中心，然后在对应的簇内部暴力历遍与查询项链的距离。
 
-② IVFPQ
+② IVFPQ、IVFADC
 
 > IVFPQ is an advanced variant of IVF, which stands for Inverted File with Product Quantization. It also splits the data into clusters but each vector in a cluster is broken down into smaller vectors, and each part is encoded or compressed into a limited number of bits using product quantization.
 
 对库内所有向量，提前做 PQ 乘积量化压缩，在选中的这 nprobe 簇里面，拿 PQ 编码做近似距离计算，根据估算距离排序，返回 TopK 候选。
+
+→ 原始向量分布范围大，训练慢、量化误差高
+
+> Training a PQ quantizer over S can still
+be time consuming. To reduce this cost, IVFADC
+first buckets vectors using k-means over a small num￾ber of centroids, and then trains a PQ quantizer by
+sampling a few vectors from each of the buckets.
+To allow a single quantizer to apply to all the buckets, each vector x is normalized by subtracting from
+its bucket key, resulting in a “residual” vector R(x)
+which is then used to train the quantizer. The full
+workflow is shown in Figure 5. During search, query
+13 Also called “lattice” quantization, see [28].
+10 James Jie Pan et al.
+q is directly compared against the quantized vectors in the bucket that q maps onto. As q itself is
+not quantized, the comparison is referred to as an
+“asymmetric distance computation” (ADC).
+
+K-means 聚类分桶后向量减去所属桶的聚类中心得到残差 \(R(x)\)，每个桶采样少量向量训练一套全局 PQ，大幅降低训练开销
+
+Q：为什么采样训练结果不会不准确？
+
+### ① 训练的对象是残差 \(R(x)=x-centroid\)
+
+同一个桶内所有向量减去簇中心之后，残差向量都聚集在原点附近，分布很紧凑。
+
+- 原始向量：值域大、分布广，想要拟合分布，需要大量样本；
+- 残差向量：均值接近 0，方差小，分布简单，用少量样本就足以学习到分布的形态，采样偏差很小。
+
+### ② 训练的是全局一套 PQ，不是分桶独立 PQ
+
+把所有桶采样的样本合在一起，总的训练样本量并不特别小；相当于从整个数据集均匀分层采样，比直接全局随机采样更有代表性。
+
+→ 局限：
+1. 桶内向量分布高度不均匀、多峰：残差不再是简单单峰分布，少量样本没法捕捉分布细节；采样得到的码本无法覆盖全部残差模式，量化误差上升。
+2. 采样数量太少：样本过少，抽样方差变大。工程上会设一个下限，每个桶最少采若干样本。
+3. 聚类 K 不合适：K 太小，每个桶里面向量混杂，残差分布变复杂；采样效果变差。
 
 ③ IVFSQ
 
