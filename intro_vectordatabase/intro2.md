@@ -399,8 +399,23 @@ time. In many cases, this can only be resolved by rebuilding the index.
 > There are three basic structures: tables divide S into buckets containing similar
 vectors; trees are a nesting of tables; graphs connect
 similar vectors with virtual edges that can then be traversed.
-
-
+> When r1 is set to minx∈S d(x, q) and r2 is set to
+cr1, the c guarantee is relative to the minimum distance. This is useful when the query is static across the
+workload, but is is hard to generalize over dynamic online queries. Hence for an index designed around some
+given hash family, not all queries may have similar candidate sets, making it hard to control precision and recall. Multi-probe LSH [88] is one attempt at addressing this issue by scanning multiple buckets at a time,
+thereby spreading out the search.(即为避免真实最近邻和q落在不同桶，不同查询召回不稳定，不仅扫描q直接映射的桶，也扫描相邻的哈希桶）
+> We mention a few popular LSH schemes. The first
+two are data independent and require no rebalancing.
+– E2LSH. Each g is an O(D) projection onto a random
+hyperplane. This achieves ρ < 1/c [49].
+– IndexLSH. This scheme is based on binary projections and is provided by Faiss [4].
+There have also been efforts at designing data dependent
+hash families to yield lower ρ.
+– FALCONN. Implements an LSH hash family based
+on spherical LSH [31]. The dataset is first projected
+onto a unit ball and then recursively partitioned into
+small overlapping spheres. The ρ value is 1/(2c
+2−1)
 
 
 
