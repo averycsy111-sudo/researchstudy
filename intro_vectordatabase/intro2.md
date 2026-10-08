@@ -27,9 +27,12 @@
    输出最优的执行方案。
 
 > Q：优化器为什么有决策能力？
+> There may be multiple ways to execute a given query.
+The goal of the query optimizer is to select the optimal
+query plan, typically the latency minimizing plan.
 > 向量数据库查询优化器的决策能力，来自内置的代价模型、系统统计信息、预设规则；不是 AI 大模型，而是一套基于统计和公式的代价估算计算器。
 > 代价 → 预估耗时、IO 读取量、CPU 计算开销、内存占用。
-
+> To achieve this goal, the first step is plan enumeration, followed by plan selection and then query execution
 > ### ① 数据库维护的**统计信息（statistics）**⭐
 
 > 存储管理器会持续收集并维护数据集的元统计，优化器读取这些数据来估算开销（并不读取原始向量数据）：
@@ -83,8 +86,36 @@
 
 混合查询：同时带有向量相似度检索 + 布尔属性谓词（元数据过滤）
 
+> If the search is index-supported, then there needs to
+be a mechanism to inform the index that certain vectors
+are filtered out. For pre-filtering, block-first scan works
+by “blocking” out vectors in the index before the scan
+is conducted [133,125,61]. The scan itself proceeds as
+normal but over the non-blocked vectors. For singlestage filtering, visit-first scan works by scanning the
+index as normal, but meanwhile checking each visited
+vector against the predicate conditions [136].
 - 方案 A（后过滤）：先用向量索引拿出 Top-k，再做元数据布尔谓词过滤 → 容易出现结果不够 k 条（召回不足）
+ > For low-selectivity predicates, visit-first scan can be
+faster than online blocking because there is no need
+to block the vectors beforehand. But if the predicate
+is highly selective, then visit-first scan risks frequent
+backtracking as the scan struggles to fill the result set.
 - 方案 B（改造索引算子，检索时直接带上属性谓词）
+  > Online Blocking. For online blocking, the aim is to
+perform the blocking as efficiently as possible in order to
+minimize the impact on query latency. In AnalyticDBV [133] and Milvus [12,125], a technique using bitmasks
+is given. A bitmask is constructed using traditional attribute filtering techniques. Then, during index scan, a
+vector is quickly checked against the bitmask to determine whether it is “blocked”.
+> Offline Blocking. For graph-based indexes, blocking
+can cause the graph to become disconnected, as shown
+in Figure 9. In Filtered-DiskANN [61], the aim is to
+prevent disconnections in the first place by strategically
+adding edges based on the attribute category of adjoining nodes.
+> → In Milvus [12,125], S is pre-partitioned along attributes that are expected to be predicate targets. When
+a query arrives, it can then be executed on the relevant
+partition using a normal index scan.
+> Q：为什么online blocking不用补边？
+> Online Blocking不改变图结构，不参与距离计算打分，但是仍可以用来作为中间点跳转，但是要访问很多无效结点，会拉高查询延迟，这也是说 online‑blocking 目标是minimize the impact on query latency的由来
 - 问题：
 1. **索引结构原本是按照向量空间距离构建的，不是按照元数据划分**
 
