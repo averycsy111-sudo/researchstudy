@@ -1,6 +1,6 @@
-# 向量数据库与 Embedding 检索笔记
+# 向量数据库介绍
 
-> 原文链接：https://zhuanlan.zhihu.com/p/27399676042，https://medium.com/@myscale/understanding-vector-indexing-a-comprehensive-guide-d1abe36ccd3c
+> 原文：https://zhuanlan.zhihu.com/p/27399676042，https://medium.com/@myscale/understanding-vector-indexing-a-comprehensive-guide-d1abe36ccd3c，Survey of Vector Database Management Systems by James Jie Pan · Jianguo Wang · Guoliang Li
 
 ## 1. 如何把原始数据嵌入为向量
 
@@ -133,6 +133,167 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 在接下来的部分，我们将更详细地介绍这些算法中的每一种，并解释它们如何影响向量数据库的整体性能。
 
 ---
+## 3. 向量查询流程
+> Consequently, the modules in a VDBMS split into a query processor, which includes the query specifications, logical operators, their physical implementations, and the query optimizer; and the storage manager, which maintains the search indexes and manages the physical storage of the vectors.
+
+> 用户发起查询：给我找和这个查询向量最相似的Top-k向量，并且过滤元数据
+
+## 阶段 1：【查询处理器】接管（主要占用 CPU、内存）
+
+任务：理解请求、选检索方案、执行相似度计算
+
+1. **解析查询**：接收查询向量和过滤条件（元数据过滤），解析请求
+   
+2. **生成逻辑执行计划**
+> 
+> 逻辑描述：检索向量索引 → 计算相似度 → 元数据过滤 → 返回 topk 结果
+>不定义具体怎么实现
+
+3.**选择检索策略**
+
+1）预定义计划 Predefined plans
+>For predefined plans, the main consideration is which
+plan to specify for which query. Some systems target
+specific workloads, thereby focusing on single plans per
+query. Other systems predefine multiple plans.
+> Single Plan. Single plans can be highly efficient as it
+removes the overhead of plan selection in addition to
+enumeration, but can be a disadvantage if the prede￾fined plan is not suited to the particular workload.
+A non-predicated query trivially has a single query
+plan when only one type of search method is available.
+
+2）自动枚举 Automatic enumeration
+
+向量数据库搭建在传统关系数据库之上，复用原有关系优化器自动枚举所有可行查询计划并做选择，只扩展 SQL，增加向量距离和向量索引扫描功能，典型代表就是 pgvector。
+
+3）优化器决策
+
+Q：优化器为什么有决策能力？
+> There may be multiple ways to execute a given query.
+The goal of the query optimizer is to select the optimal
+query plan, typically the latency minimizing plan.
+> To identify the optimal query plan, existing VDBMSs
+perform plan selection either by using handcrafted rules
+or by using a cost model.（两种优化器二选一）
+① Rule Based
+> To achieve this goal, the first step is plan enumeration, followed by plan selection and then query execution
+> Plan selection is based on two
+thresholds, one on the size of S and the other on the
+selectivity of the filter.
+不需要精细代价计算公式，规则和阈值提前确定
+ 
+② Cost Based：代价模型 Cost Model
+> Plan selection can also be performed using a cost model,
+choosing the plan with the least estimated cost.
+
+> 优化器内置一套数学公式，代价模型会分别估算：
+> The basic operator cost depends on the number of distance calculations as well as memory and disk retrievals performed
+by the operator.
+> For predicated queries, these numbers
+are estimated from the selectivity of the predicate. But
+they also depend on the desired query accuracy, which
+is exposed to the user as an adjustable parameter. The
+effect of different accuracy levels on operator cost is
+determined offline.
+
+Note：优化器数据来源 → 数据库维护的统计信息
+
+> 存储管理器会持续收集并维护数据集的元统计，优化器读取这些数据来估算开销（并不读取原始向量数据）：
+
+> - 向量库总条数、向量维度
+> - 元数据统计：每个过滤字段的基数、值分布
+> - 硬件统计：磁盘读取延迟、内存带宽、CPU 算力
+> - 索引统计：IVF 的聚类簇数量、每个簇里面向量数量；HNSW 的图节点度数；PQ 量化残差分布
+（这些索引统计不是查询的时候临时聚类算出来的，是建索引阶段一次性算好、之后持续维护，保存在存储管理器里的元数据。是离线训练建索引的时候就固定生成的，查询阶段不重新聚类。优化器的候选方案，只能在已经建好的索引里面挑选。）
+
+例子：过滤的选择 → 如果过滤后向量很少，选预过滤；过滤效果弱，选后过滤
+
+过滤的实现：
+> On the other hand, modifying the index scan operator to account for attribute predicates can degrade index performance. It remains unclear how to support “hybrid” queries over both attributes and vectors in a way that is both efficient and accurate.
+
+混合查询：同时带有向量相似度检索 + 布尔属性谓词（元数据过滤）
+
+> If the search is index-supported, then there needs to
+be a mechanism to inform the index that certain vectors
+are filtered out. For pre-filtering, block-first scan works
+by “blocking” out vectors in the index before the scan
+is conducted [133,125,61]. The scan itself proceeds as
+normal but over the non-blocked vectors. For singlestage filtering, visit-first scan works by scanning the
+index as normal, but meanwhile checking each visited
+vector against the predicate conditions [136].
+
+- 方案 A（后过滤）：先用向量索引拿出 Top-k，再做元数据布尔谓词过滤 → 容易出现结果不够 k 条（召回不足）→ 频繁回溯重新历遍
+ > For low-selectivity predicates, visit-first scan can be
+faster than online blocking because there is no need
+to block the vectors beforehand. But if the predicate
+is highly selective, then visit-first scan risks frequent
+backtracking as the scan struggles to fill the result set.
+> 
+> 1.One way to avoid backtracking is to infuse the scan
+operator with a traversal mechanism that incorporates
+attribute information → 不再是单纯后过滤，兼顾前过滤和后过滤，即single-stage filtering，缺点：索引遍历逻辑更复杂，需要改造扫描 / 图遍历代码，不能直接用原生 HNSW
+> 
+> 2.In VDBMSs that use post-filtering, this is
+often mitigated by retrieving αk nearest vectors instead
+of just the k nearest. But higher α make search more
+expensive, and there is no clear way for deciding on
+the optimal value which minimizes search cost while
+guaranteeing k results in the final result set.
+
+- 方案 B：前过滤（提前把向量打包批量预处理）
+  > ① Online Blocking. For online blocking, the aim is to
+perform the blocking as efficiently as possible in order to
+minimize the impact on query latency. In AnalyticDBV [133] and Milvus [12,125], a technique using bitmasks
+is given. A bitmask is constructed using traditional attribute filtering techniques. Then, during index scan, a
+vector is quickly checked against the bitmask to determine whether it is “blocked”.
+
+> ② Offline Blocking. For graph-based indexes, blocking
+can cause the graph to become disconnected, as shown
+in Figure 9. In Filtered-DiskANN [61], the aim is to
+prevent disconnections in the first place by strategically
+adding edges based on the attribute category of adjoining nodes.
+> → In Milvus [12,125], S is pre-partitioned along attributes that are expected to be predicate targets. When
+a query arrives, it can then be executed on the relevant
+partition using a normal index scan.
+> Q：为什么online blocking不用补边？
+> Online Blocking不改变图结构，不参与距离计算打分，但是仍可以用来作为中间点跳转，但是要访问很多无效结点，会拉高查询延迟，这也是说 online‑blocking 目标是minimize the impact on query latency的由来
+- 前过滤的问题：
+1. 索引结构原本是按照向量空间距离构建的，不是按照元数据划分
+
+IVF 的簇、HNSW 的图，聚类 / 建图只依据向量相似度，元数据是独立附属信息。检索时每一条候选都额外增加一次布尔判断，增加 CPU 开销。
+2. 索引的局部性被破坏
+
+同一个簇 / 图邻居里的向量，元数据分布是杂乱的。检索过程中频繁跳过大量不满足谓词的向量，大量距离计算、内存读取变成无效工作。
+3. 索引的预计算统计失效
+
+原本优化器依赖的簇大小、图节点度数这些索引统计，在叠加属性谓词之后，预估的代价、召回模型不准。
+
+**没有办法同时做到【检索快 + 召回 / 结果数量准确】**，这个问题目前仍然没有清晰、完美的解决办法。
+
+3.启发式规则属于优化过程中的剪枝策略，RBO 与 CBO 均可使用。启发式规则依靠领域经验直接剔除明显低效或不可行的执行方案，减少候选计划数量；例如数据量较小时直接采用暴力扫描、剔除不支持对应距离度量的索引方案。
+
+二者的区别在于：RBO 以启发式阈值规则作为**最终决策依据**；CBO 仅将启发式作为前置剪枝手段，剩余候选方案仍需要通过代价模型估算开销选出最优计划。
+
+4. **转为物理算子，发起检索**
+逻辑计划翻译成可执行的物理代码算子：
+   - 查询处理器会向存储管理器发起请求：把需要的索引 / 向量数据加载到内存**
+
+## 阶段 2：【存储管理器】响应请求（内存 + 磁盘 IO）
+
+任务：负责数据 / 索引的存放、加载、持久化
+
+1. 收到查询处理器的数据读取请求：“把 IVF 索引的簇中心、某些簇里面的向量编码加载进内存”
+2. 存储管理器先查内存缓存：如果这部分索引 / 向量已经在内存里，直接返回给查询处理器；
+3. 如果缓存没有 → 从磁盘（SSD）读取对应的数据页，加载进内存，然后交给查询处理器；
+4. 同时还要管理：向量、索引在磁盘上怎么组织、数据持久化（新增向量时，把向量和索引写入磁盘保存，断电不丢失）
+
+## 阶段 3：回到查询处理器，完成计算
+
+拿到存储管理器送来的索引和向量数据后：
+
+- 执行检索：比如 IVF：查询向量和簇中心算距离，选出 nprobe 个最近簇；然后在簇内做 PQ 近似距离计算
+- 相似度排序、元数据过滤、截取 Top-k
+- 把最终结果返回给用户
 
 ## 3. 索引技术
 
@@ -140,13 +301,24 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 > 1. **原始向量在底层存储本身是没有语义顺序的**，存放顺序一般就是插入的先后顺序，是无序的。
 > 2. **索引是单独额外构建出来的一套导航结构**。索引不会改动原始向量的物理存放位置，索引记录的是：向量 ID、簇归属、节点连接关系（HNSW）等元信息，用来**跳过大量不需要比对的向量**。
 
-### 3.1 扁平索引：最简单的索引
+实现目标：
+> (c, k)-Search Queries. Most VDBMSs support “nearest neighbor” queries, where the aim is to retrieve vectors from S that are physical neighbors of q in the vector space. These queries may aim to return exact or
+approximate nearest neighbors, and may also specify
+the number of neighbors to return. We refer to these as
+(c, k)-search queries, where c indicates the approximation degree and k is the number of neighbors.
+> Out of these, most VDBMSs support the approximate
+k-nearest neighbors (ANN) query, which returns k vectors from S that are within a radius, centered over q, of
+c times the distance between q and its closest neighbor.
+> Note: 很多工程向量库是在索引构建阶段调参间接控制近似程度，而不是让用户在查询时直接传 c。这是理论层面对查询的形式化定义，不是工程 API 参数。
+> 确定性硬保证(任何数据集、查询，输出一定满足 \(dist \le c\cdot d^*\)),这类理论算法复杂度很高，工程向量库几乎不实现，只存在算法论文。
+
+### 3.1 扁平索引/暴力索引KNN：最简单的索引
 
 > 扁平索引之所以被称为“扁平”，是因为我们不会对输入的向量进行任何修改。由于不对向量进行近似或聚类，这些索引能产生最准确的结果。我们能获得完美的搜索质量，但这是以显著的搜索时间为代价的。
 >
 > 使用扁平索引时，我们引入查询向量 x_q，并将其与索引中的每个其他完整向量进行比较，计算与每个向量的距离。
 >
-> 在计算完所有这些距离后，我们会返回其中最近的 k 个向量作为最匹配的结果，这就是 k 近邻（kNN）搜索。
+> 在计算完所有这些距离后，我们会返回其中最近的 k 个向量作为最匹配的结果，这就是 k 近邻（kNN）搜索。可以看成 c=1 的特例，返回严格真实最近邻。
 
 **如何加快搜索速度呢？主要有两种方法：**
 
@@ -327,17 +499,23 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 
 ---
 
-### 3.5 哈希方法
+### 3.5 基于表的方法（哈希方法）
+> table-based indexes such as E2LSH [49], SPANN [44], and IVFADC（即IVFPQ)[69], that are generally easy to update
+核心特征：哈希方法速度快且相对节省内存，它将相似的向量映射到同一个哈希桶中。插入、删除向量只需要修改它所属那一张表，不会改动整个索引全局结构。在处理高维数据和大规模数据集时表现良好，具有较高的吞吐量。
 
-> 哈希方法速度快且相对节省内存，它将相似的向量映射到同一个哈希桶中。在处理高维数据和大规模数据集时表现良好，具有较高的吞吐量。然而，由于哈希冲突可能会导致误报和漏报，从而降低搜索结果的质量。选择合适数量的哈希函数和哈希表至关重要，因为它们会显著影响性能。
-
-#### 3.5.1 局部敏感哈希（LSH）
+#### 3.5.1 局部敏感哈希（LSH）→ 索引用到的一类哈希，包含多个独立算法
 
 > LSH 的性能范围很广，在很大程度上取决于设置的参数。搜索速度较慢时能得到较好的结果质量，而快速搜索则会导致结果质量较差。在处理高维数据时性能不佳。条形图中半填充的部分表示修改索引参数时性能的变化范围。
 >
 > 局部敏感哈希（LSH）的工作原理是通过一个哈希函数对向量进行处理，将相似的向量分组到同一个桶中，这个哈希函数的目的是最大化哈希冲突，而不是像通常的哈希函数那样最小化冲突。
 
-> **这是什么意思呢？**
+LSH是Indyk & Motwani 当年奠基 ANN 理论的算法，专门用来实现\((c,k)\) ANN。
+
+- 给定 c，只要哈希函数数量足够多，以很高概率返回满足 \(dist(q,p) \le c\cdot d^*\) 的候选点。不是 100% 一定成功（随机哈希带来的概率性），不是绝对硬性。
+- 缺点： 查询 / 建库开销大；高维 embedding 场景召回、延迟表现不如 HNSW；
+
+
+最大化冲突：
 
 > 想象我们有一个 Python 字典。当我们在字典中创建一个新的键值对时，我们使用哈希函数对键进行哈希。键的这个哈希值决定了我们存储其对应值的“桶”。
 
@@ -374,11 +552,89 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
    * 计算向量 v 和随机向量 r 的点积；
    * 点积 ≥ 0 → 输出 1；否则输出 0。
 
+⭐如何判断LSH的检索效果：
+> \(p_1\)：近邻点落入同一个哈希桶的概率
+> \(p_2\)：远点落入同一个哈希桶的概率
+
+即LSH 设计目标为：p_1尽量大，p_2尽量小
+
+## \(\rho=\frac{\log p_1}{\log p_2}\)
+
+\(\rho\) 是 LSH 的核心理论指标，直接决定 LSH 查询复杂度。→ \(\rho\)越小，LSH 检索效率越好
+
 3. 为提升效果（和 ANNOY 一样合并候选，弥补单次划分的失误）：
+> The table is constructed by hashing each x ∈ S into
+each of the L hash tables using g1 . . . gL. Typically, L is
+set to L = O(1/pK
+1
+) with K set to ⌈log1/p2 N⌉ [32]. The
+exact value depends on the accuracy and performance
+needs of the application, and some sample curves are
+shown in [30]. Letting ρ = log(1/p1)/ log(1/p2) yields
+L = O(Nρ/p1). The storage complexity is O(LDN)
+which is O(DN1+ρ
+) after substitution. In the practical
+case where p1 > p2, the value of ρ is between 0 and 1.
+Fig. 3 Constructing and searching an LSH index.
+When a query appears, it is hashed using the L hash
+functions sampled from G, and collisions are kept as
+candidate neighbors. The candidates are then re-ranked
+or discarded based on true distances to q. Figure 3 illustrates this procedure. The query complexity is dominated by the L hash evaluations, which is O(DNρ
+).
 
-   * 一次性生成多个随机向量，把多个独立的哈希函数计算结果拼接，组成哈希码，作为桶 ID。即一组哈希函数 = 一个哈希表；
-   * 建多个哈希表，提高召回（代价：内存上升）。
+\(L = O(1/p_1^K)\)，\(K=\lceil \log_{1/p_2}N \rceil\)
+- K：每一条 hash key 由 K 个基础哈希拼接
+- L：哈希表的数量（独立哈希组的数量）
+  
+> 多哈希表 LSH：用 L 套独立哈希，一次性生成多个随机向量，把多个独立的哈希函数计算结果拼接，组成哈希码；只要任意一套哈希命中同一桶，就把该向量加入候选。用来提升召回，弥补串联 K 个哈希后\(p_1\)下降的问题
 
+4. LSH 概率可证明保证c
+> When r1 is set to minx∈S d(x, q) and r2 is set to
+cr1, the c guarantee is relative to the minimum distance. This is useful when the query is static across the
+workload, but is is hard to generalize over dynamic online queries. Hence for an index designed around some
+given hash family, not all queries may have similar candidate sets, making it hard to control precision and recall.
+哈希函数理论上保证：在半径\(r_1\)内的最近邻，会落在\(r_2=c\cdot r_1\)范围内。c是放大倍数。\(r_1\)是查询向量q到数据集S里真实最近邻的距离。
+> 局限：这个理论保证是建立在已知真实最小距离的前提下。
+> 如果查询是静态固定的，可以预先确定距离；在线动态查询时，事先并不知道真实最近邻距离，这个理论边界不准确。
+> Multi-probe LSH [88] is one attempt at addressing this issue by scanning multiple buckets at a time,
+thereby spreading out the search.
+即为避免真实最近邻和q落在不同桶，不同查询召回不稳定，不仅扫描q直接映射的桶，也扫描相邻的哈希桶
+
+#### 3.5.2 常见哈希算法
+> We mention a few popular LSH schemes. The first
+two are data independent and require no rebalancing.
+– E2LSH. Each g is an O(D) projection onto a random
+hyperplane. This achieves ρ < 1/c [49].
+哈希函数g的构造：随机超平面投影。
+
+生成一个随机超平面，把向量投影到这个平面上，根据投影符号（正 / 负）做二值划分，完成哈希。单次投影计算复杂度\(O(D)\)，D 是向量维度。
+
+特点：数据无关哈希。哈希函数完全随机生成，随机取超平面。
+✅优点：理论简单，证明完备，对任意分布数据都能保证近似检索边界。
+❌缺点：\(\rho\)不够小，想要好召回需要大量哈希表，内存开销大；高维向量效率一般。
+– IndexLSH. This scheme is based on binary projections and is provided by Faiss [4].
+There have also been efforts at designing data dependent
+hash families to yield lower ρ.
+- 实现基础：**二值投影（binary projections）**，Faiss 库内置的 LSH 实现。
+- 原理：同样随机投影，投影结果直接压缩成 0/1 二进制哈希码。
+- 定位：属于工程实现版本的 LSH，基于 E2LSH 这套随机投影思想，做工程简化。
+✅优点：集成在 Faiss，开箱即用；生成二进制哈希，哈希码占用内存很小。
+❌缺点：基础版依然是**数据无关哈希**，\(\rho\)理论下限没有突破 E2LSH，只是工程实现。
+– FALCONN. Implements an LSH hash family based
+on spherical LSH [31]. The dataset is first projected
+onto a unit ball and then recursively partitioned into
+small overlapping spheres. The ρ value is 1/(2c
+2−1)
+- 流程：
+  1. 先把全部数据集向量归一化，投影到单位超球（unit ball）上；
+  2. 递归地在单位球上划分出多个互相重叠的小球（overlapping spheres）；
+  3. 哈希规则：向量落在哪个球，就分到对应的桶。
+- 理论指标：\(\boldsymbol{\rho = \dfrac{1}{2c^2-1}}\)
+✅优点：**数据依赖**，利用数据集分布去构造哈希划分，相比 E2LSH，\(\rho\)显著更低，检索效率更高。
+
+> 
+> E2LSH 是随机超平面切割，切割方向和数据无关；FALCONN 划分是结合数据分布的球面划分，所以理论性能更好。
+> ❌缺点：需要预处理、归一化、递归划分；实现更复杂，只适合在单位球面归一化后的向量。
 ---
 
 ### 3.6 聚类方法
