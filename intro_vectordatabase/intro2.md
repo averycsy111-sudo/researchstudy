@@ -25,14 +25,39 @@
    - 预过滤还是后过滤？
    - 要扫描多少个聚类簇（nprobe）？
    输出最优的执行方案。
+>Note：不是所有数据库都有动态优化器
+1）预定义计划 Predefined plans
+>For predefined plans, the main consideration is which
+plan to specify for which query. Some systems target
+specific workloads, thereby focusing on single plans per
+query. Other systems predefine multiple plans.
+> Single Plan. Single plans can be highly efficient as it
+removes the overhead of plan selection in addition to
+enumeration, but can be a disadvantage if the prede￾fined plan is not suited to the particular workload.
+A non-predicated query trivially has a single query
+plan when only one type of search method is available.
+
+2）自动枚举 Automatic enumeration
+
+向量数据库搭建在传统关系数据库之上，复用原有关系优化器自动枚举所有可行查询计划并做选择，只扩展 SQL，增加向量距离和向量索引扫描功能，典型代表就是 pgvector。
+
+3）优化器
 
 > Q：优化器为什么有决策能力？
 > There may be multiple ways to execute a given query.
 The goal of the query optimizer is to select the optimal
 query plan, typically the latency minimizing plan.
-> 向量数据库查询优化器的决策能力，来自内置的代价模型、系统统计信息、预设规则；不是 AI 大模型，而是一套基于统计和公式的代价估算计算器。
-> 代价 → 预估耗时、IO 读取量、CPU 计算开销、内存占用。
+> To identify the optimal query plan, existing VDBMSs
+perform plan selection either by using handcrafted rules
+or by using a cost model.
+
+向量数据库查询优化器的决策能力，来自内置的代价模型、系统统计信息、预设规则；不是 AI 大模型，而是一套基于统计和公式的代价估算计算器。
+
+代价 → 预估耗时、IO 读取量、CPU 计算开销、内存占用。
 > To achieve this goal, the first step is plan enumeration, followed by plan selection and then query execution
+> Plan selection is based on two
+thresholds, one on the size of S and the other on the
+selectivity of the filter.
 > ### ① 数据库维护的**统计信息（statistics）**⭐
 
 > 存储管理器会持续收集并维护数据集的元统计，优化器读取这些数据来估算开销（并不读取原始向量数据）：
@@ -47,12 +72,18 @@ query plan, typically the latency minimizing plan.
 > 如果查询要做元数据过滤，优化器看统计：过滤后只剩很少向量 → 选择先过滤（预过滤）再向量检索；如果过滤条件筛不掉多少数据 → 选择先向量检索，后过滤。
 
 > ### ② 代价模型 Cost Model
+> Plan selection can also be performed using a cost model,
+choosing the plan with the least estimated cost.
 
 > 优化器内置一套数学公式，代价模型会分别估算：
-
-> 1. IO 代价：需要从磁盘读多少索引页 / 向量页（存储管理器负责读，IO 开销很大）
-> 2. CPU 代价：要算多少次向量距离、多少次比较、排序开销
-> 3. 内存代价：中间结果占用内存大小
+> The basic operator cost depends on the number of distance calculations as well as memory and disk retrievals performed
+by the operator.
+> For predicated queries, these numbers
+are estimated from the selectivity of the predicate. But
+they also depend on the desired query accuracy, which
+is exposed to the user as an adjustable parameter. The
+effect of different accuracy levels on operator cost is
+determined offline.
 
 > ### ③ 启发式规则（heuristic rules）
 
@@ -94,18 +125,28 @@ is conducted [133,125,61]. The scan itself proceeds as
 normal but over the non-blocked vectors. For singlestage filtering, visit-first scan works by scanning the
 index as normal, but meanwhile checking each visited
 vector against the predicate conditions [136].
-- 方案 A（后过滤）：先用向量索引拿出 Top-k，再做元数据布尔谓词过滤 → 容易出现结果不够 k 条（召回不足）
+- 方案 A（后过滤）：先用向量索引拿出 Top-k，再做元数据布尔谓词过滤 → 容易出现结果不够 k 条（召回不足）→ 频繁回溯重新历遍
  > For low-selectivity predicates, visit-first scan can be
 faster than online blocking because there is no need
 to block the vectors beforehand. But if the predicate
 is highly selective, then visit-first scan risks frequent
 backtracking as the scan struggles to fill the result set.
-- 方案 B（改造索引算子，检索时直接带上属性谓词）
+> 1.One way to avoid backtracking is to infuse the scan
+operator with a traversal mechanism that incorporates
+attribute information → 不再是单纯后过滤，兼顾前过滤和后过滤，即single-stage filtering，缺点：索引遍历逻辑更复杂，需要改造扫描 / 图遍历代码，不能直接用原生 HNSW
+> 2.In VDBMSs that use post-filtering, this is
+often mitigated by retrieving αk nearest vectors instead
+of just the k nearest. But higher α make search more
+expensive, and there is no clear way for deciding on
+the optimal value which minimizes search cost while
+guaranteeing k results in the final result set.
+- 方案 B（提前把向量打包批量预处理）
   > Online Blocking. For online blocking, the aim is to
 perform the blocking as efficiently as possible in order to
 minimize the impact on query latency. In AnalyticDBV [133] and Milvus [12,125], a technique using bitmasks
 is given. A bitmask is constructed using traditional attribute filtering techniques. Then, during index scan, a
 vector is quickly checked against the bitmask to determine whether it is “blocked”.
+
 > Offline Blocking. For graph-based indexes, blocking
 can cause the graph to become disconnected, as shown
 in Figure 9. In Filtered-DiskANN [61], the aim is to
@@ -448,10 +489,34 @@ onto a unit ball and then recursively partitioned into
 small overlapping spheres. The ρ value is 1/(2c
 2−1)
 
+> CPU Cache. If data is not present in the processor
+cache, then it must be retrieved from memory, stalling
+the processor. As shown in Figure 11, Milvus [12,125]
+minimizes cache misses for batched queries by partitioning the queries into query blocks, which are small
+enough to fit into the CPU cache. The queries are answered a block at a time, and multiple threads can be
+used to process the queries. As each thread references
+the entire block when performing a search, the block is
+safe from eviction under the common eviction policies.
+Note: 
+- 如果：处理 Query1 → 把 Query1 向量读入 cache；算完 Query1，处理 Query2，重新把 Query2 向量从内存读进catche，反复读写查询向量，大量 cache miss。
+- Milvus：把一小批查询向量一次性放进 cache，不会被淘汰。
+> 还是要加载底库向量，但是节省了查询向量反复加载这一部分的内存访问开销。
+> 批量查询场景下，一条底库向量会依次和 block 内全部查询向量算距离。
+> 👉 底库向量读一次，复用给多个个查询；同时查询向量常驻 cache 不用反复拉取，双向减少 cache miss。
 
-
-
-
+> Native mostly-vector
+systems broadly offer high performance but are targeted
+at specific workloads, sometimes even specific queries,
+and thus have relatively limited capability. Meanwhile,
+native mostly-mixed systems offer more capabilities,
+notably predicated queries, and some such as Milvus
+[12,125], Qdrant [10], and Manu [63] also perform query
+> optimization. These, along with extended NoSQL systems, achieve a comfortable balance between high performance and search capabilities. On the other hand,
+extended relational systems offer the most capabilities
+but possibly less performance. But, as has been mentioned elsewhere35, relational systems are already major components of industrial data infrastructures, and
+being able to conduct vector search without introducing
+new systems into the infrastructure is a compelling advantage. The ranking shown in Figure 14 is consistent
+with empirical observations [37].
 
 
 
