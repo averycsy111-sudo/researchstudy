@@ -376,6 +376,65 @@ c times the distance between q and its closest neighbor.
 
 ---
 
+### 3.3 向量空间划分方法
+1. **随机划分**
+随机超平面、随机球面切割（E2LSH、FALCONN）。
+✅ 划分边界是随机生成的，数据无关。
+
+3. **学习 / 数据驱动划分**
+k-means 聚类 → Voronoi 划分（IVF）；学习哈希。
+✅ 看数据分布来切空间。
+
+**聚类算法：**
+
+##### ① K-means
+
+无监督聚类算法。无监督 = 不需要给数据打标签，自动把相似的数据归成一类。
+
+**核心目标**：给定一堆数据，算法自动找出预设的 K 个簇中心（质心）。
+
+**简单步骤：**
+
+1. 随机选 K 个初始中心点；
+2. **分配**：所有样本，划分给距离最近的中心点，形成 K 个簇；
+3. **更新**：每个簇内所有样本求平均，得到新的簇中心；
+4. 重复【分配 → 更新】直到中心点基本不再移动，收敛停止。
+
+优点显著：
+1. **速度快，适用于大规模向量**。
+2. **可以预先指定桶的数量 k**。簇数量、大小和检索性能相对可控；
+3. 产出**球形簇、Voronoi 划分**，适合距离检索（欧氏距离）；
+4. 实现成熟，Faiss、Milvus、FAISS 全原生内置 kmeans++。
+
+缺点：容易落到局部最优；假设簇是球形；对异常点敏感。
+
+但工程上代价可控，多次跑取最优质心就可以缓解。
+
+##### ② 基于密度的空间聚类算法（DBSCAN）
+
+> DBSCAN 算法基于密度可达性和密度连通性的概念。它从数据集中的任意一个点开始，如果在给定半径 eps 内，该点周围至少有 minPts 个点，就会创建一个新的聚类。这里的 eps 代表 epsilon，是用户定义的输入参数，表示两个点在同一聚类中时，它们之间的最大距离；而 minPts 指的是形成一个聚类所需的最少数据点数量。
+>
+> 它会迭代地将 eps 半径内所有直接可达的点添加到聚类中。这个过程会一直持续，直到没有更多的点可以添加到这个聚类中。然后，算法会继续处理数据集中下一个未访问过的点，并重复上述过程，直到所有点都被访问过。
+>
+> DBSCAN 算法中的关键参数是 eps 和 minPts，它们分别定义了点的聚类范围和形成聚类所需的最小点密度。
+
+> **Note：**
+>
+> 最后剩下始终没有被任何聚类吸纳的点，就是噪声。
+>
+> **参数 eps、minPts 的权衡（考点）**
+>
+> 1. eps 太大：距离很远的点都算邻居，很多簇合并成一大团，聚类数量变少；eps 太小：只有挨得极近才算邻居，大片点直接被判定成噪声，簇被拆碎。
+> 2. minPts 越大：要求局部点的密度更高，不容易形成聚类，更多点变成噪声；minPts 越小：很低密度就能形成簇，容易把零散噪声也打包成聚类。
+
+Note：
+- DBSCAN 密度聚类：簇大小不均衡，有的桶极大、有的几乎空桶，检索性能不可控
+- 层次聚类：计算开销巨大，高维海量向量不适合
+
+所以在 VDB 的索引里，几乎只有 k-means（变体 kmeans++）被大规模广泛使用。
+---
+
+
 ### 3.3 基于树的向量索引方法
 
 > 基于树的方法对于低维数据非常有效，并且可以提供精确的最近邻搜索。然而，由于“维度诅咒”，它们在高维空间中的性能通常会下降。此外，它们需要大量内存，对于大型数据集效率较低，这会导致构建时间更长和延迟更高。
@@ -394,6 +453,10 @@ c times the distance between q and its closest neighbor.
 2. **动态更新差**：新增 / 删除向量，树结构容易失衡，往往需要完整重建索引，不适合频繁写入的业务；
 3. **召回上限不如图索引 HNSW。**
 
+> For tree-based indexes, the main consideration is the
+design of the splitting strategy used to recursively split
+S into a search tree.
+
 #### 精确最近邻树索引
 
 > 不属于前文所说 ANN，带有回溯剪枝，只把不可能的情况舍去，仍是精确 KNN。
@@ -405,6 +468,8 @@ c times the distance between q and its closest neighbor.
 3. **关键剪枝**：计算查询点到分割线的距离。如果这个距离大于当前已经找到的最近点距离，说明另外一侧子树不可能存在更近点，可以直接丢弃整棵子树。
 4. 递归对左右两部分继续重复，直到叶子节点存少量向量。
 
+pivot-based trees:选一个数据点当参考，用样本到这个支点的距离来划分空间、做剪枝。
+
 ##### ② Ball-Tree
 
 1. 选一个中心点，把所有向量包进一个超球；
@@ -412,7 +477,21 @@ c times the distance between q and its closest neighbor.
 3. 查询点到球心距离 − 球半径 > 当前找到的最小距离 → 这个球里面不可能存在更近的点，直接整颗球丢弃，不用遍历内部向量；
 4. 递归，每个子球继续拆分。
 
-##### ③ VP-Tree
+##### ③ M-Tree
+M-tree 是**为数据库量身设计的 pivot 树**！
+
+- 建树：每个节点选一个**支点 pivot 作为球心**，记录覆盖半径；这个节点下所有数据点到 pivot 的距离 ≤ 半径。
+- 核心特色：**原生设计支持动态更新（插入、删除向量）**。
+- 划分：新增点放到距离最近的支点对应的子球；球放不下就分裂节点。
+- 剪枝：同样三角不等式，但是节点结构为磁盘存储优化（数据库 B 树风格，分页）。
+- 短板：频繁插入删除会让超球重叠越来越严重，剪枝效率快速下降；高维失效。
+
+### 一句话对比 Ball-tree & M-tree
+
+> 
+> Ball-tree：构造时选最远两点分裂超球，偏向静态 ANN 检索，不面向数据库动态更新；
+> M-tree：以支点为球心构建超球，借鉴 B + 树结构，**主打磁盘存储 + 动态增删**，是数据库版本的超球支点树。
+##### ④ VP-Tree
 
 1. 随机选一个向量作为优势点 VP；
 2. 计算所有向量到这个 VP 的距离，取中位数距离；
@@ -476,7 +555,20 @@ c times the distance between q and its closest neighbor.
 **核心原理**：对原始高维浮点数向量做有损压缩，把连续取值的向量空间离散化，把量化技术包装成完整检索方案。
 
 **查询步骤：**
-
+> For IVFADC, many distance calculations are likely
+to be repeated during bucket scan since many vectors
+may share the same PQ centroids. These calculations
+can be avoided by first computing ∥qj − c∥
+2
+for all c ∈
+Uj and for all j ∈ 1 . . . m, where qj is the jth sub-vector
+of q [91]. This preprocessing step takes O(m)O( m
+D K′
+),
+where K′
+is the number of centroids in Uj . But afterwards, ADC can be performed using just m look-ups,
+reducing bucket scan from O(DN) to O(mN)
+> 
 1. 查询向量 q 按完全相同的量化规则切分，拿 q_i（q 的第 i 段子向量），和第 i 段码书里全部 K 个中心算距离，保存成一张距离表：
 
    `dis_table[i][j] = 距离 q 的 i 段子向量，第 i 段码书第 j 号中心`
@@ -587,6 +679,8 @@ or discarded based on true distances to q. Figure 3 illustrates this procedure.
 - L：哈希表的数量（独立哈希组的数量）
   
 > 多哈希表 LSH：用 L 套独立哈希，一次性生成多个随机向量，把多个独立的哈希函数计算结果拼接，组成哈希码；只要任意一套哈希命中同一桶，就把该向量加入候选。用来提升召回，弥补串联 K 个哈希后\(p_1\)下降的问题
+> One of the main criticisms of LSH is that the storage
+cost can be large due to the use of multiple hash tables.
 
 4. LSH 概率可证明保证c
 > When r1 is set to minx∈S d(x, q) and r2 is set to
@@ -615,11 +709,11 @@ hyperplane. This achieves ρ < 1/c [49].
 – IndexLSH. This scheme is based on binary projections and is provided by Faiss [4].
 There have also been efforts at designing data dependent
 hash families to yield lower ρ.
-- 实现基础：**二值投影（binary projections）**，Faiss 库内置的 LSH 实现。
+- 实现基础：二值投影，Faiss 库内置的 LSH 实现。
 - 原理：同样随机投影，投影结果直接压缩成 0/1 二进制哈希码。
-- 定位：属于工程实现版本的 LSH，基于 E2LSH 这套随机投影思想，做工程简化。
+- 定位：属于工程实现版本的 LSH，基于 E2LSH 这套随机投影思想，依然是数据无关哈希，\(\rho\)理论下限没有突破 E2LSH，只是工程简化实现。
 ✅优点：集成在 Faiss，开箱即用；生成二进制哈希，哈希码占用内存很小。
-❌缺点：基础版依然是**数据无关哈希**，\(\rho\)理论下限没有突破 E2LSH，只是工程实现。
+
 – FALCONN. Implements an LSH hash family based
 on spherical LSH [31]. The dataset is first projected
 onto a unit ball and then recursively partitioned into
@@ -631,10 +725,13 @@ small overlapping spheres. The ρ value is 1/(2c
   3. 哈希规则：向量落在哪个球，就分到对应的桶。
 - 理论指标：\(\boldsymbol{\rho = \dfrac{1}{2c^2-1}}\)
 ✅优点：**数据依赖**，利用数据集分布去构造哈希划分，相比 E2LSH，\(\rho\)显著更低，检索效率更高。
+❌缺点：需要预处理、归一化、递归划分；实现更复杂，只适合在单位球面归一化后的向量。
 
-> 
-> E2LSH 是随机超平面切割，切割方向和数据无关；FALCONN 划分是结合数据分布的球面划分，所以理论性能更好。
-> ❌缺点：需要预处理、归一化、递归划分；实现更复杂，只适合在单位球面归一化后的向量。
+#### 3.5.3 Learning to Hash
+> Learning-based techniques aim to directly learn suitable
+mappings without resorting to hash families. These techniques tend to require lengthy training
+and are sensitive to out-of-distribution updates, and they are not widely supported in VDBMSs
+
 ---
 
 ### 3.6 聚类方法
@@ -645,40 +742,6 @@ small overlapping spheres. The ρ value is 1/(2c
 
 1. **建索引**：将所有向量聚类，每个向量归属距离最近的簇；索引保存簇中心，同时记录每个簇内部包含哪些向量。
 2. **查询阶段**：先计算查询向量和各个簇中心的距离，挑选距离最近的少数几个簇；只在选中簇的内部向量中做相似度检索，直接跳过其他全部簇，缩小搜索空间，加快检索速度。
-
-**聚类算法：**
-
-##### ① K-means
-
-无监督聚类算法。无监督 = 不需要给数据打标签，自动把相似的数据归成一类。
-
-**核心目标**：给定一堆数据，算法自动找出预设的 K 个簇中心（质心）。
-
-**简单步骤：**
-
-1. 随机选 K 个初始中心点；
-2. **分配**：所有样本，划分给距离最近的中心点，形成 K 个簇；
-3. **更新**：每个簇内所有样本求平均，得到新的簇中心；
-4. 重复【分配 → 更新】直到中心点基本不再移动，收敛停止。
-
-##### ② 基于密度的空间聚类算法（DBSCAN）
-
-> DBSCAN 算法基于密度可达性和密度连通性的概念。它从数据集中的任意一个点开始，如果在给定半径 eps 内，该点周围至少有 minPts 个点，就会创建一个新的聚类。这里的 eps 代表 epsilon，是用户定义的输入参数，表示两个点在同一聚类中时，它们之间的最大距离；而 minPts 指的是形成一个聚类所需的最少数据点数量。
->
-> 它会迭代地将 eps 半径内所有直接可达的点添加到聚类中。这个过程会一直持续，直到没有更多的点可以添加到这个聚类中。然后，算法会继续处理数据集中下一个未访问过的点，并重复上述过程，直到所有点都被访问过。
->
-> DBSCAN 算法中的关键参数是 eps 和 minPts，它们分别定义了点的聚类范围和形成聚类所需的最小点密度。
-
-> **Note：**
->
-> 最后剩下始终没有被任何聚类吸纳的点，就是噪声。
->
-> **参数 eps、minPts 的权衡（考点）**
->
-> 1. eps 太大：距离很远的点都算邻居，很多簇合并成一大团，聚类数量变少；eps 太小：只有挨得极近才算邻居，大片点直接被判定成噪声，簇被拆碎。
-> 2. minPts 越大：要求局部点的密度更高，不容易形成聚类，更多点变成噪声；minPts 越小：很低密度就能形成簇，容易把零散噪声也打包成聚类。
-
----
 
 
 #### 3.6.1 倒排文件（IVF）索引
@@ -705,13 +768,54 @@ small overlapping spheres. The ρ value is 1/(2c
 
 即最简单的IVF，选出与查询向量距离最近的nprobe个中心，然后在对应的簇内部暴力历遍与查询项链的距离。
 
+quantization-based indexes：
+
 ② IVFPQ、IVFADC
 
 > IVFPQ is an advanced variant of IVF, which stands for Inverted File with Product Quantization. It also splits the data into clusters but each vector in a cluster is broken down into smaller vectors, and each part is encoded or compressed into a limited number of bits using product quantization.
 
 对库内所有向量，提前做 PQ 乘积量化压缩，在选中的这 nprobe 簇里面，拿 PQ 编码做近似距离计算，根据估算距离排序，返回 TopK 候选。
 
-→ 原始向量分布范围大，训练慢、量化误差高
+→ 原始向量分布范围大，训练慢、量化误差高，学术界 / 工业界几乎不用；经典 IVFADC (IVFPQ) 一定是残差版本。
+
+> But large K make k-means expensive. Product quantization exploits the fact that the cross product of m
+number of (D/m)-dimensional spaces is a space of D dimensions, so that by setting U =
+Q
+m
+j=1 Ui
+, then U ∈ R
+D
+when Uj ∈ R
+D/m. This means that to yield a count of
+K centroids, only K1/m centroids need to be found per
+Uj . Moreover as each Uj belongs to a lower dimensional
+space, the running time of k-means per Uj is reduced.
+The new complexity is O(m)O( m
+D NK1/mi).
+Each Uj is constructed via k-means over the collection of sub-vectors {(xi)
+jD/m
+i=(j−1)D/m+1 | x ∈ S}
+12, and
+the set of all Uj is known as the “codebook”. Vector
+x is then quantized by splitting it into m sub-vectors,
+x
+′
+j
+, finding the nearest centroid in Uj to x
+′
+j
+for each
+j ∈ 1 . . . m, and then concatenating these centroids.
+Each vector is thus stored using m log2
+(D/m) bits, and
+the time complexity is O(m)O(DK1/m)
+
+**Jégou 原始 PQ 论文（2011）+ Faiss 原生 IndexIVFPQ（经典原版）**：
+K-means 聚类分桶后向量减去所属桶的聚类中心得到残差 \(R(x)\)，用残差统一训练PQ码本
+
+优点：码本拟合全部数据分布，召回更高；缺点：海量数据集时训练 PQ 非常耗时间。
+
+Survey of Vector Database Management Systems by James Jie Pan · Jianguo Wang · Guoliang Li这一篇里面的IVFADC是工程优化版本：
 
 > Training a PQ quantizer over S can still
 be time consuming. To reduce this cost, IVFADC
@@ -725,9 +829,9 @@ workflow is shown in Figure 5. During search, query
 10 James Jie Pan et al.
 q is directly compared against the quantized vectors in the bucket that q maps onto. As q itself is
 not quantized, the comparison is referred to as an
-“asymmetric distance computation” (ADC).
+“asymmetric distance computation” (ADC)（非对称距离计算）.
 
-K-means 聚类分桶后向量减去所属桶的聚类中心得到残差 \(R(x)\)，每个桶采样少量向量训练一套全局 PQ，大幅降低训练开销
+每个桶采样少量向量训练一套全局 PQ，大幅降低训练开销
 
 Q：为什么采样训练结果不会不准确？
 
