@@ -1277,8 +1277,99 @@ NGT:
 而在无过滤、全库检索的情况下（最常规 KNN，不加任何 where 条件）：HNSW 高层长距离跳转，贪心直接逼近目标；MSTG 需要逐层和质心计算、逐层下探树分支，树导航的开销不一定占优。而且 MSTG 到底层之后，依然要跑局部近邻图，底层检索开销和 HNSW 接近。
 
 ---
+Note：
+> Query Accuracy and Performance. The search capability of a VDBMS is assessed by evaluating query accuracy and performance.
+> To evaluate accuracy, precision and recall are often
+used. Precision is defined as the ratio between the number of relevant results in the result set over the size of
+the result set, and recall is defined as the ratio between
+the number of retrieved relevant results over all possible
+relevant results.
+> To evaluate performance, latency and throughput
+are used. Latency is the amount of time it takes for a
+VDBMS to answer a query once it is received, while
+throughput is the number of queries that are answered
+per unit time, often reported as queries per second.
+>
+> The modern belief is that even a fractional power of
+N query complexity cannot be obtained unless storage
+cost is worse than N O(1)DO(1)
+
+多项式存储 Polynomial Storage:存储量是 N 和 D 的多项式函数，记作 \(poly(N,D)=N^{O(1)}D^{O(1)}\)。
+
+HNSW / IVF可以通过细化索引,保留更多边/聚类中心来提高召回率,但这类索引仍然属于多项式存储,哪怕把它调得再精细，也无法拿到理论上的分数幂亚线性查询复杂度。只是工程平均速度变快，最坏情况依然可能接近 O (N)。
 
 ## 4. 相似度度量
+
+Basic Scores
+
+> Several similarity scores are commonly supported by VDBMSs
+> Similarity is often measured via distance in practice, with values closer to 0 indicating greater similarity. Distance functions obey the metric axioms of identity
+> Type	                      Score Metric	      Complexity	 Range
+  Sim.（Similarity 相似度）	 Inner Prod. 内积	         O(D)	      R（全体实数）
+  Sim.	                   Cosine 余弦相似度	         O(D)	      [−1,1]
+  Dist.（Distance 距离）	    Minkowski 闵可夫斯基距离	O(D)	      R+（非负实数）
+  Dist.	                   Mahalanobis 马氏距离	      O(D2+O(1))	R+
+  Dist.	                   Hamming 汉明距离	         O(D)	      N（自然数，0,1,2…）
+
+Definition 1 (Hamming) d(a, b) = P n i=1 δaibi
+
+> The Hamming distance counts the number of differing dimensions between vectors a and b
+
+Definition 2 (Inner Product) f(a, b) = P n i=1 aibi
+> Note：The dot product projects a onto b and scales the result by the magnitude of b. The scaling can lead to unintuitive consequences. For example, two large identical vectors have a larger dot product compared to two small identical vectors, thus they would be considered “more similar” under this definition. If magnitude is not important, a and b can be normalized by ˆa = a/∥a∥ and bˆ = b/∥b∥ so that they
+possess unit magnitudes.
+
+Definition 3 (Cosine Similarity) f(a, b) = ⟨ˆa, bˆ⟩or f(a, b) = ∥
+⟨
+a
+a
+∥∥
+,b
+b
+⟩
+∥
+
+Definition 4 (Minkowski) The p-order Minkowski
+distance is d(a, b) = (P n
+i=1 |ai − bi
+|
+p
+)
+1/p
+or d(a, b) = ∥a − b∥p
+
+Definition 5 (Mahalanobis) For any positive semidefinite matrix M, d(a, b) = p (a − b)⊤M(a − b).
+
+> Another generalization of Euclidean distance can be
+obtained by applying a linear transformation over the
+vector space in order to adjust the relative proximities
+of the feature vectors. The distance of two vectors in
+the transformed space can be calculated using the Mahalanobis formula.
+
+> Note: 闵可夫斯基距离是欧氏距离的广义形式；而马氏距离又是欧氏距离的另一种广义化思路，先对向量空间做线性变换，再在新空间上算欧氏距离
+> 
+> Aside from these basic scores, some VDBMSs also support aggregate scores for applications like multi-vector search [129]. There is also emerging work on learned scores [25,142,93], but these are not available in commercial systems
+
+Aggregate Scores
+
+**aggregate scores 聚合得分 + multi-vector search 多向量检索**
+ → 一个实体对应一组多个向量。
+> One way of approaching this problem is
+to use an aggregate score that defines how to combine
+individual scores f(x1, q). . . f(xm, q) to yield a single
+value that can be compared.
+
+例子：一张图片，拆成多个局部区域，每个区域提取一个向量；或者一段长文本，分成多个 chunk，得到一组向量。
+
+把这一组向量各自的相似度合并、聚合（比如取最大值、平均值、加权求和）得到一个最终分数，即聚合得分。
+
+Learned Scores
+
+**learned scores 学习型相似度得分**
+传统指标是固定数学公式，人工定义好的，不随数据分布自适应。而 learned scores：用机器学习模型自己学到的相似度度量。
+
+- 优点：适配特定任务，匹配效果往往更好
+- 缺点：计算开销大、推理慢，难以构建索引做 ANN 近似检索
 
 > **Q：之前讨论的那些索引算法都是用的距离，可以搭配不同的相似度度量使用吗？**
 >
@@ -1319,3 +1410,5 @@ HNSW 算法本身不绑定距离公式，属于通用框架。
 ### 4.4 PQ
 
 PQ 乘积量化是向量压缩，压缩后计算的是估算距离，估算器需要和你选用的相似度匹配，可以用于欧氏、归一化后的余弦。
+
+硬件加速和现有向量数据库详细介绍见原文
