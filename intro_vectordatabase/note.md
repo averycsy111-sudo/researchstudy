@@ -438,6 +438,29 @@ Note：
 ### 3.3 基于树的向量索引方法
 
 > 基于树的方法对于低维数据非常有效，并且可以提供精确的最近邻搜索。然而，由于“维度诅咒”，它们在高维空间中的性能通常会下降。此外，它们需要大量内存，对于大型数据集效率较低，这会导致构建时间更长和延迟更高。
+>
+> Curse of Dimensionality
+
+> When D grows beyond
+around 10 dimensions, and when the dimensions are
+independent and identically distributed, the Euclidean
+distances between the two farthest and two nearest vectors approach equality as the variance nears zero
+
+**大数定律**：
+独立同分布随机变量 \(Z_1,Z_2,\dots,Z_d\)：
+
+\(\bar Z_d=\frac1d\sum_{i=1}^d Z_i \xrightarrow{P} \mathbb E[Z]\)
+
+样本均值收敛到期望。
+
+→ 当 \(d\to\infty\)：
+
+\(\frac1d\sum_{i=1}^d Z_i^2 \xrightarrow{P} \mathbb E[Z_i^2] = \text{常数}\)
+
+\(\|X-Y\|^2 \approx d\cdot \mathbb E[Z_i^2]\)
+两点之间距离平方，**几乎必然趋近于一个和 d 成正比的确定值**。
+
+> 证明：？
 
 **本质：空间划分 + 层次剪枝**
 
@@ -457,9 +480,43 @@ Note：
 design of the splitting strategy used to recursively split
 S into a search tree.
 
+树的分类：
+
+检索类型：
+> Most trees are able to return exact query results by
+performing backtracking, where neighboring leaf nodes
+are also checked during the search. However, this is inefficient [132], and they are more often used for returning
+approximate results using defeatist search [48]. In this
+procedure, the tree is traversed down to the leaf level,
+and all vectors within the leaf covering q are returned
+immediately as the nearest neighbors. There is no backtracking, and the complexity is O(D log N).
+
 #### 精确最近邻树索引
 
 > 不属于前文所说 ANN，带有回溯剪枝，只把不可能的情况舍去，仍是精确 KNN。
+#### 近似树索引
+
+> 不做回溯，人为舍弃可能存在近邻的区域。
+
+划分范式：
+
+1. Partitioning Tree：递归地把整个向量空间（或者当前节点内的向量集合）拆成互不重叠的子集，构建出一棵层次树
+
+其中，
+
+1）Non-Random Trees
+
+2) Random Trees
+
+Principal Component Trees：A principal component tree is a k-d tree that is constructed by first rotating S so that the axes are aligned with the principal
+components of S. The principal dimensions need to be
+found beforehand using principal component analysis
+(PCA)
+
+Random Projection Trees：random splitting planes can be used to adapt to the intrinsic dimensionality without expensive PCA.
+
+2. pivot-based trees:选一个数据点当参考，用样本到这个支点的距离来划分空间、做剪枝。
+
 
 ##### ① KD-Tree
 
@@ -468,7 +525,27 @@ S into a search tree.
 3. **关键剪枝**：计算查询点到分割线的距离。如果这个距离大于当前已经找到的最近点距离，说明另外一侧子树不可能存在更近点，可以直接丢弃整棵子树。
 4. 递归对左右两部分继续重复，直到叶子节点存少量向量。
 
-pivot-based trees:选一个数据点当参考，用样本到这个支点的距离来划分空间、做剪枝。
+→ 改进：High-D tree-based indexes tend to rely on randomization for performing node splits.
+##### ② PKD-Tree
+1. 在节点做 PCA，把向量投影到随机挑选的几个主成分方向；
+2. 在投影后的一维上取中位数切分，二叉划分；
+3. 融合了随机投影 + KD 树的中位数分割。
+
+> In particular, “Fast
+Library for ANN” (FLANN) [15,96] combines randomization with learned partitioning via principal component analysis (PCA), extending the PKD-tree technique
+>
+Note：普通 KD 树低维可以做精确 KNN；高维场景下 PKD-Tree 在 FLANN 里作为 ANN 索引使用以换取速度。
+
+##### ③ RP-Tree
+划分规则：生成一个 d 维向量，每个分量独立从标准正态分布 \(N(0,1)\) 采样，归一为单位投影向量，把全部向量点乘投影到这条直线上，\(proj(\boldsymbol{x})=\boldsymbol{x}\cdot \boldsymbol{r}\)，把 d 维向量压缩成一个标量（一维数值）；在投影后的一维取中位数进行二分。
+
+> Q：为什么选择正态分布：
+> 高维空间里，正态采样归一后的向量，均匀分布在单位超球面，各个方向机会均等，不会偏向坐标轴。
+如果直接在\([-1,1]\)均匀采样，向量会集中在立方体的角上，投影方向有偏差。
+
+建树和查询，必须复用当时建树保存的那根随机向量 \(\boldsymbol{r}\),\(proj(q)\) 和该节点保存的中位数阈值大小，属于ANN
+
+随机投影并非彻底消除维数灾难，而是通过构造PCA局部方差最大方向/混合所有维度的随机投影方向，避免 KD 树仅依赖单一原始坐标轴划分带来的缺陷。投影将高维向量映射为一维标量，必然损失信息；Johnson–Lindenstrauss 引理保证，在高概率下向量间的相对距离可以近似保留。但单次投影仍存在误划分风险，因此 PKD-Tree、RP-Tree 通常构建多树森林，用多组独立随机投影来抵消单次投影带来的信息丢失，提升召回。
 
 ##### ② Ball-Tree
 
@@ -480,17 +557,16 @@ pivot-based trees:选一个数据点当参考，用样本到这个支点的距�
 ##### ③ M-Tree
 M-tree 是**为数据库量身设计的 pivot 树**！
 
-- 建树：每个节点选一个**支点 pivot 作为球心**，记录覆盖半径；这个节点下所有数据点到 pivot 的距离 ≤ 半径。
-- 核心特色：**原生设计支持动态更新（插入、删除向量）**。
+- 建树：每个节点选一个支点 pivot 作为球心，记录覆盖半径；这个节点下所有数据点到 pivot 的距离 ≤ 半径。
+- 核心特色：原生设计支持动态更新（插入、删除向量）。
 - 划分：新增点放到距离最近的支点对应的子球；球放不下就分裂节点。
 - 剪枝：同样三角不等式，但是节点结构为磁盘存储优化（数据库 B 树风格，分页）。
 - 短板：频繁插入删除会让超球重叠越来越严重，剪枝效率快速下降；高维失效。
 
-### 一句话对比 Ball-tree & M-tree
-
-> 
+> Note：对比 Ball-tree & M-tree
 > Ball-tree：构造时选最远两点分裂超球，偏向静态 ANN 检索，不面向数据库动态更新；
 > M-tree：以支点为球心构建超球，借鉴 B + 树结构，**主打磁盘存储 + 动态增删**，是数据库版本的超球支点树。
+
 ##### ④ VP-Tree
 
 1. 随机选一个向量作为优势点 VP；
@@ -499,10 +575,6 @@ M-tree 是**为数据库量身设计的 pivot 树**！
 4. 递归对内圈、外圈继续选 VP 建树。
 
 ⇒ Ball-Tree、VP-Tree 解决了 KD-Tree 会粗暴切开簇的问题。
-
-#### 近似树索引
-
-> 不做回溯，人为舍弃可能存在近邻的区域。
 
 ##### ④ ANNOY（Approximate Nearest Neighbors Oh Yeah）
 
@@ -545,6 +617,20 @@ M-tree 是**为数据库量身设计的 pivot 树**！
 7. 在候选集合里计算距离，返回 Top-K。
 
 > Annoy 的高效性和内存高效性使其成为处理高维数据和大型数据库的有力选择。不过，也有一些需要考虑的权衡因素。构建索引可能需要花费大量时间，特别是对于大型数据集。由于 Annoy 使用随机森林分区算法，索引无法使用新数据进行更新，必须从头重新构建。根据数据集的大小以及数据变化的频繁程度，重新训练索引的成本可能过高。
+
+#### ⑤ K-Means Tree
+1. 根节点：拿到当前节点的全部向量集合
+2. 对集合运行k-means 聚类，聚成`k`个簇，得到`k`个聚类中心
+3. 每个簇单独成为一个子节点，子节点只保存属于这个簇的向量
+4. 对每个子节点递归重复上面聚类划分
+5. 终止条件：节点内向量数量少于阈值（叶子节点，不再划分）
+
+- 非叶子节点：只存k 个聚类中心；叶子节点：存储实际原始向量
+- 同样的找最近（前几个）簇进入叶子节点返回top k，手动舍弃可能包含最近邻的分支，并行检索多棵树
+
+但是k-means tree没办法避免维度灾难：
+
+高维空间中，任意两点之间距离数值趋同，k-means 聚类失效，所有样本到候选质心的距离差不多，聚类出来的簇没有空间局部性x；不同簇之间大量重叠，召回率暴跌。
 
 ---
 
@@ -866,6 +952,26 @@ Q：为什么采样训练结果不会不准确？
 1. **建索引**：遍历向量库，为每个节点和它的相似近邻节点建立连接，保存整张图的邻接关系；部分算法构建多层图，上层做远距离跳转、下层保存精细近邻关系。
 2. **查询**：从图中某个入口节点出发，沿着边贪心游走，不断向距离查询向量更近的节点前进；多次迭代收敛，找到近邻候选，不需要扫描全部向量，兼顾速度与召回率。
 
+#### 3.7.1 KNNG
+> In a KNNG, each node vi
+is connected to k nodes representing the nearest neighbors to xi
+[56]. For batched
+queries, q can be considered as a member of S, and a
+KNNG built over S allows exact k-NN search in O(1)
+time through a simple look-up.
+A KNNG can also be used to answer interactive
+queries, where q ∈/ S. The basic idea is to recursively
+select node neighbors that are nearest to q, starting
+from initial nodes, and add them into the top-k result
+set. The search complexity depends on the number of
+iterations before the result set converges. The search
+can start from multiple initial nodes, and if there are
+no more node neighbors to select, it can be restarted
+from new initial nodes [122].
+A KNNG can be exact or approximated with a technique which we refer to as “iterative refine”
+> Exact. An exact KNNG can be constructed by performing a brute force search N number of times, giving
+a total complexity of O(DN2
+).
 #### 3.7.1 分层可导航小世界图（HNSW）
 
 > Its graph-like structure takes inspiration from two different techniques: the probability skip list and Navigable Small World (NSW).
