@@ -952,7 +952,7 @@ Q：为什么采样训练结果不会不准确？
 1. **建索引**：遍历向量库，为每个节点和它的相似近邻节点建立连接，保存整张图的邻接关系；部分算法构建多层图，上层做远距离跳转、下层保存精细近邻关系。
 2. **查询**：从图中某个入口节点出发，沿着边贪心游走，不断向距离查询向量更近的节点前进；多次迭代收敛，找到近邻候选，不需要扫描全部向量，兼顾速度与召回率。
 
-#### 3.7.1 KNNG
+#### 3.7.1 KNNG怎么建图 → 基于图的向量检索方法里最核心的一类
 > In a KNNG, each node vi
 is connected to k nodes representing the nearest neighbors to xi
 [56]. For batched
@@ -972,9 +972,244 @@ A KNNG can be exact or approximated with a technique which we refer to as “it
 > Exact. An exact KNNG can be constructed by performing a brute force search N number of times, giving
 a total complexity of O(DN2
 ).
+> Iterative Refine. An approximate KNNG can be obtained by iteratively refining an initial graph. We give
+two examples. → 优化目标是每个点的邻居尽量是真实近邻
+>– NN-Descent（KGraph). The NN-Descent (KGraph) method [52]
+begins with a random KNNG and iteratively refines
+it by examining the neighbors of the neighbors of
+each node vi
+, replacing edges to vi with edges to
+these second-order neighbors that are closer. When
+the dataset is growth restricted17, then each iteration is expected to halve the radius around each
+node and its farthest neighbor.（半径减半是理想化假设，证明KNNG贪心建图算法迭代轮数是对数级） This property leads
+to fast convergence, with empirical times on the order of O(N2−ϵ
+) for 0 < ϵ < 1.
+
+迭代求精：用来快速构造近似 KNNG，图里的边不一定是严格真实最近邻，是近似的，牺牲召回换取建图速度
+
+思路:
+1. **初始化**：随机建一张 KNNG。每个节点随便挑 k 个点当邻居。
+2. **迭代求精**：
+对每个节点\(v_i\)，考察它**邻居的邻居（二阶邻居）**。
+如果某个二阶邻居离\(v_i\)更近，就把\(v_i\)原来的边替换成这个更近的点，更新邻接表。
+3. 不断循环迭代，图的质量持续提升，当本轮迭代没有任何节点的邻居列表发生更新时停止
+– EFANNA. Instead of starting from a random KNNG,
+EFANNA18 uses a forest of randomized k-d trees to
+build the initial KNNG. Doing so is shown to lead
+to higher recall and faster construction, as it can
+quickly converge to better local optima.
+
+先用多棵随机 k-d 树森林，快速给每个节点找一批候选近邻，用这批候选边，搭建初始 KNNG。之后同样执行迭代求精。
+
+> A KNNG is not guaranteed to be connected. Disconnected components complicates the search procedure
+for online queries by requiring restarts to achieve high
+accuracy [101,122]. But by adding certain edges so that
+the graph is connected, it becomes possible to follow a
+single path beginning from any initial node and arriving
+at the nearest neighbor to q.
+→ 如果图不连通，贪心算法可能永远搜不到最近邻
+A search path v1 . . . vm is monotonic if d(vi
+, q) >
+d(vi+1, q) for all i from 1 to m − 1. An MSN is a
+graph where the search path discovered by a “best-first”
+search, in which the neighbor of vi that is nearest to q
+is greedily selected（当前点所有邻居里挑距离 q 最近的点作为下一步）, is always monotonic.s nearest to q
+is greedily selected, is always monotonic. This property
+implies a monotonic path for every pair of nodes in the
+graph and that the graph is connected.
+> The minimum-edge MSN
+that guarantees exact NNS is believed to be the Delaunay triangulation [97]. But constructing a triangulation
+requires at least Ω(N⌈D/2⌉
+) time [55], impractical for
+large N and D. As a result, several approximate methods have been developed, but these necessarily sacrifice
+the search guarantee
+
+Delaunay 三角剖分：
+
+对点集做三角剖分（把空间切成三角形），满足空圆准则：D 维单纯形（2D 三角形，3D 四面体）的外接球内部不含别的点
+
+性质：是MSN，且边数很少，理论性质极强
+
+RNG:
+
+两点 \(u,v\) 之间连边，当且仅当不存在任何第三个点 w，同时满足：
+
+\(d(u,w) < d(u,v),\quad d(v,w) < d(u,v)\)，即没有第三个点落在以 u、v 为球心、半径 d (u,v) 的两个球的交集里面
+
+xqueries, where q ∈/ S. The basic idea is to recursively
+select node neighbors that are nearest to q, starting
+from initial nodes, and add them into the top-k result
+set. The search complexity depends on the number of
+iterations before the result set converges. The search
+can start from multiple initial nodes, and if there are
+no more node neighbors to select, it can be restarted
+from new initial nodes [122].
+A KNNG can be exact or approximated with a technique which we refer to as “iterative refine”
+> Exact. An exact KNNG can be constructed by performing a brute force search N number of times, giving
+a total complexity of O(DN2
+).
+> Iterative Refine. An approximate KNNG can be obtained by iteratively refining an initial graph. We give
+two examples.
+>– NN-Descent. The NN-Descent (KGraph) method [52]
+begins with a random KNNG and iteratively refines
+it by examining the neighbors of the neighbors of
+each node vi
+, replacing edges to vi with edges to
+these second-order neighbors that are closer. When
+the dataset is growth restricted17, then each iteration is expected to halve the radius around each
+node and its farthest neighbor.（半径减半是理想化假设，证明KNNG贪心建图算法迭代轮数是对数级） This property leads
+to fast convergence, with empirical times on the order of O(N2−ϵ
+) for 0 < ϵ < 1.
+
+迭代求精：用来快速构造近似 KNNG，图里的边不一定是严格真实最近邻，是近似的，牺牲召回换取建图速度
+
+思路:
+1. **初始化**：随机建一张 KNNG。每个节点随便挑 k 个点当邻居。
+2. **迭代求精**：
+对每个节点\(v_i\)，考察它**邻居的邻居（二阶邻居）**。
+如果某个二阶邻居离\(v_i\)更近，就把\(v_i\)原来的边替换成这个更近的点，更新邻接表。
+3. 不断循环迭代，图的质量持续提升，当本轮迭代没有任何节点的邻居列表发生更新时停止
+– EFANNA. Instead of starting from a random KNNG,
+EFANNA18 uses a forest of randomized k-d trees to
+build the initial KNNG. Doing so is shown to lead
+to higher recall and faster construction, as it can
+quickly converge to better local optima.
+
+先用多棵随机 k-d 树森林，快速给每个节点找一批候选近邻，用这批候选边，搭建初始 KNNG。之后同样执行迭代求精。
+
+#### 3.7.2 MSN如何建图
+> A KNNG is not guaranteed to be connected. Disconnected components complicates the search procedure
+for online queries by requiring restarts to achieve high
+accuracy [101,122]. But by adding certain edges so that
+the graph is connected, it becomes possible to follow a
+single path beginning from any initial node and arriving
+at the nearest neighbor to q.
+→ 如果图不连通，贪心算法可能永远搜不到最近邻
+A search path v1 . . . vm is monotonic if d(vi
+, q) >
+d(vi+1, q) for all i from 1 to m − 1. An MSN is a
+graph where the search path discovered by a “best-first”
+search, in which the neighbor of vi that is nearest to q
+is greedily selected（当前点所有邻居里挑距离 q 最近的点作为下一步）, is always monotonic.s nearest to q
+is greedily selected, is always monotonic. This property
+implies a monotonic path for every pair of nodes in the
+graph and that the graph is connected.
+> The minimum-edge MSN
+that guarantees exact NNS is believed to be the Delaunay triangulation [97]. But constructing a triangulation
+requires at least Ω(N⌈D/2⌉
+) time [55], impractical for
+large N and D. As a result, several approximate methods have been developed, but these necessarily sacrifice
+the search guarantee
+
+Delaunay 三角剖分：
+
+对点集做三角剖分（把空间切成三角形），满足空圆准则：D 维单纯形（2D 三角形，3D 四面体）的外接球内部不含别的点
+
+性质：是MSN，且边数很少，理论性质极强
+
+> In the early work by [51], an MSN is constructed
+in polynomial time by refining a sub-graph of the Delaunay triangulation called the relative neighborhood
+graph (RNG). The RNG itself is not monotone, but it can be
+constructed in O(DN2−o(1) log1−o(1) N) time under R
+D
+Euclidean distance [114]. But the N2−o(1) term makes
+this approach impractical for large N.
+
+RNG:
+
+两点 \(u,v\) 之间连边，当且仅当不存在任何第三个点 w，同时满足：
+
+\(d(u,w) < d(u,v),\quad d(v,w) < d(u,v)\)，即没有第三个点落在以 u、v 为球心、半径 d (u,v) 的两个球的交集里面
+
+性质：RNG属于Delaunay，本身不是MSN，所以可以做refine构造MSN
+
+> Note：RNG、Delaunay 都属于理论工具，工业向量检索库几乎不会直接用 RNG 做索引。
+
+> For InitializeGraph, some indexes begin with an empty
+graph [66], random graph [115], or approximate KNNG
+[58]. Simple graphs can be initialized quickly but more
+complex graphs may offer better quality.
+> For ChooseSourceTargetPair, one way is to select random pairs
+[66], while another is to designate a node as the source
+for all search trials [115,58]. We refer to these techniques as random and fixed trials, respectively
+>
+→ 优化目标是保证贪心搜索的路径单调下降
+
+1. Random Trial
+
+每次迭代，随机从数据集里挑一对 s 和 t。
+优点：采样覆盖面广；
+缺点：随机性强，可能大量采样到简单的点对，做很多无用的补边操作。
+
+① FANNG
+> FANNG. In the Fast ANN Graph [66], graph con
+struction terminates after a fixed number of trials,
+e.g. 50N. The UpdateOutNeighbors routine adds an
+edge between t and the nearest node in the search
+path, p ∗ ∈ P, and then prunes out-neighbors of p ∗
+based on “occlusion” rules derived from the triangle inequality in order to limit out-degrees. The empir
+ical storage and search complexities are reported to
+be on the order of O(DN1−ϵ ).
+
+从 s 出发搜索邻居到 t 时得到的贪心搜索路径，如果走到p就断开，则p是路径里离目标点 t 最近的那个节点，连接 \(t \leftrightarrow p^*\)，补这条边，用来保证未来从 s 向 t 搜索时存在单调路径；
+- **occlusion 遮挡剪枝**
+基于三角不等式定义的遮挡规则：
+> 
+> 如果节点 u 到 v 的距离 ≥ u 到 w 的距离 + w 到 v 的距离，就说 w **遮挡**了边 \(u \to v\)。
+> 作用：**限制每个节点的出度，防止图的边无限膨胀**。
+
+2. Fixed Trial.
+> In fixed trial construction, all trials are
+conducted from a special designated source node, sometimes called the “navigating” node. This node also serves
+as the source for all online queries
+即只要贪心搜索从 s₀出发，就可以沿着单调路径走到任意 t。
+
+① NSG
+
+1. 初始图：approximate KNNG
+先用 NNDescent 这类方法，先构造一张近似 KNNG，作为基础图。
+2. 边筛选：lune membership（月牙判定）
+ 两点 u、v 的月牙区域：两个球 \(B(u,d(u,v))\) 和 \(B(v,d(u,v))\) 的交集。
+> lune membership：判断点是否落在这个月牙内。即RNG的判定条件。
+- 作用：筛选冗余边，保留几何上有意义的边，删掉多余边，控制节点出度。
+3. 叠加生成树 spanning tree：经过 fixed trial 补边之后，依然有可能存在部分节点，从导航节点\(s_0\)走不到，额外加一棵生成树，把所有孤岛连通起来。
+
+② Vamana → NSG 的简化、提速版本
+
+1. 初始图换成 random graph
+2. 边剪枝：，改用简单距离阈值（FANNG）
+> 图的质量理论上略弱，但建图速度大幅提升。
+
+#### 3.7.3 NSW
+> A graph is small-world if the length of its characteristic
+path grows in O (log N) [131]. A navigable graph is one
+where the length of the search path found by the best
+first search algorithm scales logarithmically with N. A graph that is both navigable and small-world (NSW)
+thus possesses a search complexity that is likely to be
+logarithmic, even in the worst case.
+> Note：
+> Small-world：图存在最短路径
+> Navigable：贪心搜索能找到一条短路径
+> 图可以是小世界，但贪心搜索很容易迷路 → 小世界 ≠ 可导航
+
+> NSW（HNSW的原型）. An NSW graph can be constructed using
+a procedure which we call one-shot refine and detailed in [89]. Nodes are sequentially inserted into
+the graph, and when a node is inserted, it is connected to its k nearest neighbors already in the graph.
+
+即节点一个接一个陆续加入图，新节点只在已经提前插入、已经在图里的旧节点里面找它的 k 近邻，建立边。
+> Note：没有任何trial和补边，只是小世界，并不是MSN，叫 NSW只是实践上贪心大概率能搜到，没有严格单调理论保证贪心路径单调
+
 #### 3.7.1 分层可导航小世界图（HNSW）
+> omization in order to restore logarithmic search. During node insertion, the
+node is assigned to all layers below a randomly selected maximum layer, chosen from an exponentially
+decaying distribution so that the size of each layer
+grows logarithmically from top to bottom. Within
+each layer, the node is connected to its neighbors
+following the NSW procedure, but where the outdegrees are bounded. Best-first search proceeds from
+the top-most layer.
 
 > Its graph-like structure takes inspiration from two different techniques: the probability skip list and Navigable Small World (NSW).
+
 
 Skip List
 
@@ -1013,12 +1248,13 @@ Note：如果一个节点分配最高层是 2，那它会同时存在 Layer0、L
 
 > In HNSWFLAT, the raw vectors are stored as they are, while in HNSWSQ, the vectors are stored in a quantized form. Apart from this key difference in data storage, the overall process and methodology of indexing and searching are the same in both HNSWFLAT and HNSWSQ.
 
-### 3.7.4 Multi-Scale Tree Graph (MSTG) Algorithm
+### 3.7.4 NGT & Multi-Scale Tree Graph (MSTG) Algorithm
 
 > Standard Inverted File Indexing (IVF) partitions a vector dataset into numerous clusters. However, a notable limitation is the substantial growth in index size for massive datasets, requiring the storage of many cluster representative vectors. The scalability of IVF is hindered by the significant memory overhead associated with this approach.
 > Multi-Stage Tree Graph (MSTG) is developed by MyScale and it overcomes this through a hierarchical design. Unlike IVF which has a single layer of cluster vectors, MSTG creates multiple layers, which means less persistent centroids in the memory. For example, if a dataset needs 10,000 cluster vectors in IVF, all 10,000 have to be stored, consuming substantial memory. In MSTG, using a 2-layer hierarchy of 100 clusters per layer, only 200 vectors need storage — the 100 top-layer vectors, and their 100 direct children.
 > MSTG combines the advantages of both tree and graph-based algorithms.
 
+NGT:
 依旧上疏下密（树状层级聚类）
 - **上层**：少量质心（训练的 k 小），代表全局大区域，覆盖范围很大，节点稀疏
 - **往下**：每个上层质心管辖的区域内，再做 K-means 分出子质心，不需要把全部子层的质心一次性加载进内存；子质心覆盖的空间更小、更精细，数量变多、分布变密，与HNSW不同不是原始数据
