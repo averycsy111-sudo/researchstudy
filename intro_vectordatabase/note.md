@@ -1,19 +1,19 @@
 # 向量数据库介绍
 
-> 原文：https://zhuanlan.zhihu.com/p/27399676042，https://medium.com/@myscale/understanding-vector-indexing-a-comprehensive-guide-d1abe36ccd3c，Survey of Vector Database Management Systems by James Jie Pan · Jianguo Wang · Guoliang Li
+原文：https://zhuanlan.zhihu.com/p/27399676042，https://medium.com/@myscale/understanding-vector-indexing-a-comprehensive-guide-d1abe36ccd3c，  Survey of Vector Database Management Systems by James Jie Pan · Jianguo Wang · Guoliang Li
 
 ## 1. 如何把原始数据嵌入为向量
 
 ### 1.1 不同原始数据类型转向量
 
-> **Q：embedding 模型是怎么实现不同模态数据的跨模态搜索的？**
->
-> 多模态嵌入模型将不同类型原始数据映射到同一个共享向量空间，实现跨模态相似度计算。
->
-> * **图像**：原始 RGB 像素矩阵，经预处理后由视觉 Transformer/CNN 提取视觉特征，投影生成图像嵌入；
-> * **文本**：字符串先分词，通过文本 Transformer 编码，投影得到文本嵌入；
-> * **音频**：原始声波转为梅尔频谱，音频编码器提取特征后映射为音频嵌入；
-> * **视频**：抽取关键帧提取图像特征，融合时序信息得到视频嵌入。
+**Q：embedding 模型是怎么实现不同模态数据的跨模态搜索的？**
+
+多模态嵌入模型将不同类型原始数据映射到同一个共享向量空间，实现跨模态相似度计算。
+
+* **图像**：原始 RGB 像素矩阵，经预处理后由视觉 Transformer/CNN 提取视觉特征，投影生成图像嵌入；
+* **文本**：字符串先分词，通过文本 Transformer 编码，投影得到文本嵌入；
+* **音频**：原始声波转为梅尔频谱，音频编码器提取特征后映射为音频嵌入；
+* **视频**：抽取关键帧提取图像特征，融合时序信息得到视频嵌入。
 
 ### 1.2 向量写入向量数据库的完整步骤（以 Chroma / FAISS / Milvus 举例）
 
@@ -22,9 +22,9 @@
 * **清洗**：去掉换行、多余空格、特殊符号
 * **分块（Chunking）**：得到一批 `chunk_list`
 
-> 原因：嵌入模型有最大 token 限制；块太大语义混乱，块太小丢失上下文。块重叠（overlap）
->
-> 常用：512–1024 token 一块，重叠 10–20% 避免语义割裂。
+原因：嵌入模型有最大 token 限制；块太大语义混乱，块太小丢失上下文。
+
+常用：512–1024 token 一块，重叠 10–20% 避免语义割裂。
 
 #### ② 调用 Embedding 模型生成向量
 
@@ -52,7 +52,7 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 
 ## 2. 传统数据库与向量数据库
 
-> 从本质上讲，向量数据库是针对非结构化数据的综合解决方案。与这种误解相反，它具备如今结构化/半结构化数据库管理系统中的一些用户友好特性，比如云原生、多租户和可扩展性。随着我们对本教程的深入探讨，就会发现它克服了独立向量索引的局限性，解决了可扩展性难题、集成复杂性，以及缺乏实时更新和内置安全措施等问题。
+>从本质上讲，向量数据库是针对非结构化数据的综合解决方案。与这种误解相反，它具备如今结构化/半结构化数据库管理系统中的一些用户友好特性，比如云原生、多租户和可扩展性。随着我们对本教程的深入探讨，就会发现它克服了独立向量索引的局限性，解决了可扩展性难题、集成复杂性，以及缺乏实时更新和内置安全措施等问题。
 
 **独立向量索引**：单纯的算法库（FAISS、Annoy），储存向量，做相似度查询。
 
@@ -73,22 +73,24 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
    多条关联行不能出现部分更新。
 2. **强大的多表关联、分组、统计、复杂 SQL 聚合查询。**
 
-> **Q：每一条记录都包含向量、元数据，为什么不能像传统数据库一样，把两个集合拿出来联合查询？**
->
-> JOIN 是「两张表，通过关联字段，把行和行做笛卡尔匹配」。
->
-> 向量数据库也支持跨集合查询，但只能靠应用代码做拼接。
->
-> 先在集合 A 做向量检索拿到 id，拿着 id 去集合 B 做过滤查询。
->
-> → 两次独立查询。不是数据库内部直接把两个集合做关联运算。当数据量巨大的时候，性能会很差。而如果硬给向量库加上完整 JOIN、ACID，会牺牲向量检索的性能，违背它的设计初衷。
+**Q：每一条记录都包含向量、元数据，为什么不能像传统数据库一样，把两个集合拿出来联合查询？**
+
+JOIN 是两张表通过关联字段，把行和行做笛卡尔匹配。
+
+向量数据库也支持跨集合查询，但只能靠应用代码做拼接。
+
+先在集合 A 做向量检索拿到 id，拿着 id 去集合 B 做过滤查询。
+
+→ 两次独立查询。不是数据库内部直接把两个集合做关联运算。当数据量巨大的时候，性能会很差。而如果硬给向量库加上完整 JOIN、ACID，会牺牲向量检索的性能，违背它的设计初衷。
 
 ⇒ 传统数据库高度结构化，向量数据库很难实现：
 
-1. **元数据是自由的 key-value，没有强制的表结构、没有外键概念。**
+① **元数据是自由的 key-value，没有强制的表结构、没有外键概念。**
    元数据可以随便新增字段，不需要提前定义表；这是它处理非结构化碎片的优势，但没有办法建立表与表之间的强关联关系。
-2. **向量数据库底层存储，向量和元数据是分开存储的：**
+
+② **向量数据库底层存储，向量和元数据是分开存储的：**
    向量存在专门的向量存储引擎，元数据存在另一个存储。它的设计重心是快速找“向量距离近的条目”，而不是做跨集合的复杂关联运算。
+
 3. **成熟稳定，生态极其庞大**
 4. **结构化数据存储效率极高**
 
@@ -96,7 +98,7 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 
 1. **原生针对高维向量做索引优化，千万–亿级向量相似度搜索速度远快于 pgvector；**
 
-   > pgvector 是 PostgreSQL 插件，它给关系库增加向量检索能力，但它依然受关系库架构限制，海量向量下性能不如专门向量数据库。
+   pgvector 是 PostgreSQL 插件，它给关系库增加向量检索能力，但它依然受关系库架构限制，海量向量下性能不如专门向量数据库。
 
 2. **原生支持非结构化数据的语义检索**：文本、图片的 embedding 检索；
 
@@ -104,63 +106,57 @@ embedding 模型的翻译规则是 AI 模型在海量文本里学习出来的转
 
 4. **元数据灵活**，不需要强行把数据拆成固定列。
 
-> **Note：现实工程中，两者经常搭配使用（RAG 最典型架构）**
->
-> 1. **关系数据库**：存业务结构化数据：用户信息、文档元信息（文档 id、文件名、上传时间、权限），处理事务、业务统计。
-> 2. **向量数据库**：只存：文本 chunk 的向量 + 少量元数据；专门做语义相似度检索。
+**Note：现实工程中，两者经常搭配使用（RAG 最典型架构）**
 
-> **Q：为什么向量数据库没有统一指令？因为太新了。→ 现实工程怎么解决“指令不统一”的痛点？**
->
-> 自己写一层封装，把不同接口统一成自己内部的函数。
->
-> 多语言 SDK：同一套底层 API，包装成不同编程语言的调用，底层指令是一样的。
->
-> 比如 Milvus 提供 Python、Go、Java SDK。
+1. **关系数据库**：存业务结构化数据：用户信息、文档元信息（文档 id、文件名、上传时间、权限），处理事务、业务统计。
+2. **向量数据库**：只存：文本 chunk 的向量 + 少量元数据；专门做语义相似度检索。
 
-> 在传统数据库中，我们通常查询数据库中值与查询条件完全匹配的行。而在向量数据库中，我们通过应用相似性度量来找到与查询向量最相似的向量。
+**Q：为什么向量数据库没有统一指令？因为太新了。→ 现实工程怎么解决“指令不统一”的痛点？**
 
-> **Q：为什么向量数据库几乎不找“完全一模一样的向量”，而是找相似的？**
->
-> * 想要完全一样的原文，直接用传统数据库做文本精确匹配。
-> * 向量检索的价值就是处理语义近似，文字不完全相同的情况，而传统数据库无法解析文本内部语义，只能做关键词 Like 模糊匹配，没办法做语义相似度检索。
+自己写一层封装，把不同接口统一成自己内部的函数。
 
-**索引**：向量数据库使用诸如 PQ、LSH 或 HNSW 等算法对向量进行索引（下文会详细介绍这些算法）。这一步将向量映射到一种数据结构，以便加快搜索速度。
+多语言 SDK：同一套底层 API，包装成不同编程语言的调用，底层指令是一样的。
+比如 Milvus 提供 Python、Go、Java SDK。
 
-**查询**：向量数据库将索引后的查询向量与数据集中的索引向量进行比较，找到最近邻向量（应用该索引使用的相似性度量）。
+在传统数据库中，我们通常查询数据库中值与查询条件完全匹配的行。而在向量数据库中，我们通过应用相似性度量来找到与查询向量最相似的向量。
 
-**后处理**：在某些情况下，向量数据库从数据集中检索最终的最近邻向量，并对其进行后处理以返回最终结果。这一步可能包括使用不同的相似性度量对最近邻向量重新排序。
+**Q：为什么向量数据库几乎不找“完全一模一样的向量”，而是找相似的？**
 
-在接下来的部分，我们将更详细地介绍这些算法中的每一种，并解释它们如何影响向量数据库的整体性能。
+* 想要完全一样的原文，直接用传统数据库做文本精确匹配。
+* 向量检索的价值就是处理语义近似，文字不完全相同的情况，而传统数据库无法解析文本内部语义，只能做关键词 Like 模糊匹配，没办法做语义相似度检索。
+
+> **索引**：向量数据库使用诸如 PQ、LSH 或 HNSW 等算法对向量进行索引（下文会详细介绍这些算法）。这一步将向量映射到一种数据结构，以便加快搜索速度。
+
+> **查询**：向量数据库将索引后的查询向量与数据集中的索引向量进行比较，找到最近邻向量（应用该索引使用的相似性度量）。
+
+> **后处理**：在某些情况下，向量数据库从数据集中检索最终的最近邻向量，并对其进行后处理以返回最终结果。这一步可能包括使用不同的相似性度量对最近邻向量重新排序。
+
+> 在接下来的部分，我们将更详细地介绍这些算法中的每一种，并解释它们如何影响向量数据库的整体性能。
 
 ---
+
 ## 3. 向量查询流程
 > Consequently, the modules in a VDBMS split into a query processor, which includes the query specifications, logical operators, their physical implementations, and the query optimizer; and the storage manager, which maintains the search indexes and manages the physical storage of the vectors.
 
-> 用户发起查询：给我找和这个查询向量最相似的Top-k向量，并且过滤元数据
+用户发起查询：给我找和这个查询向量最相似的Top-k向量，并且过滤元数据
 
-## 阶段 1：【查询处理器】接管（主要占用 CPU、内存）
+### 阶段 1：【查询处理器】接管（主要占用 CPU、内存）
 
 任务：理解请求、选检索方案、执行相似度计算
 
 1. **解析查询**：接收查询向量和过滤条件（元数据过滤），解析请求
-   
-2. **生成逻辑执行计划**
-> 
-> 逻辑描述：检索向量索引 → 计算相似度 → 元数据过滤 → 返回 topk 结果
->不定义具体怎么实现
 
-3.**选择检索策略**
+2. **生成逻辑执行计划**
+
+逻辑描述：检索向量索引 → 计算相似度 → 元数据过滤 → 返回 topk 结果
+不定义具体怎么实现
+
+3. **选择检索策略**
 
 1）预定义计划 Predefined plans
->For predefined plans, the main consideration is which
-plan to specify for which query. Some systems target
-specific workloads, thereby focusing on single plans per
-query. Other systems predefine multiple plans.
-> Single Plan. Single plans can be highly efficient as it
-removes the overhead of plan selection in addition to
-enumeration, but can be a disadvantage if the prede￾fined plan is not suited to the particular workload.
-A non-predicated query trivially has a single query
-plan when only one type of search method is available.
+> For predefined plans, the main consideration is which plan to specify for which query. Some systems target specific workloads, thereby focusing on single plans per query. Other systems predefine multiple plans. 
+
+> Single Plan. Single plans can be highly efficient as it removes the overhead of plan selection in addition to enumeration, but can be a disadvantage if the predefined plan is not suited to the particular workload. A non-predicated query trivially has a single query plan when only one type of search method is available.
 
 2）自动枚举 Automatic enumeration
 
@@ -169,116 +165,80 @@ plan when only one type of search method is available.
 3）优化器决策
 
 Q：优化器为什么有决策能力？
-> There may be multiple ways to execute a given query.
-The goal of the query optimizer is to select the optimal
-query plan, typically the latency minimizing plan.
-> To identify the optimal query plan, existing VDBMSs
-perform plan selection either by using handcrafted rules
+> There may be multiple ways to execute a given query. The goal of the query optimizer is to select the optimal query plan, typically the latency minimizing plan. To identify the optimal query plan, existing VDBMSs perform plan selection either by using handcrafted rules
 or by using a cost model.（两种优化器二选一）
-① Rule Based
-> To achieve this goal, the first step is plan enumeration, followed by plan selection and then query execution
-> Plan selection is based on two
-thresholds, one on the size of S and the other on the
-selectivity of the filter.
-不需要精细代价计算公式，规则和阈值提前确定
- 
-② Cost Based：代价模型 Cost Model
-> Plan selection can also be performed using a cost model,
-choosing the plan with the least estimated cost.
 
-> 优化器内置一套数学公式，代价模型会分别估算：
-> The basic operator cost depends on the number of distance calculations as well as memory and disk retrievals performed
-by the operator.
-> For predicated queries, these numbers
-are estimated from the selectivity of the predicate. But
-they also depend on the desired query accuracy, which
-is exposed to the user as an adjustable parameter. The
-effect of different accuracy levels on operator cost is
-determined offline.
+① Rule Based
+> To achieve this goal, the first step is plan enumeration, followed by plan selection and then query execution Plan selection is based on two thresholds, one on the size of S and the other on the selectivity of the filter.
+
+不需要精细代价计算公式，规则和阈值提前确定
+
+② Cost Based：代价模型 Cost Model
+> Plan selection can also be performed using a cost model, choosing the plan with the least estimated cost.
+
+优化器内置一套数学公式，代价模型会分别估算：
+> The basic operator cost depends on the number of distance calculations as well as memory and disk retrievals performed by the operator. For predicated queries, these numbers are estimated from the selectivity of the predicate. But they also depend on the desired query accuracy, which is exposed to the user as an adjustable parameter. The effect of different accuracy levels on operator cost is determined offline.
 
 Note：优化器数据来源 → 数据库维护的统计信息
 
-> 存储管理器会持续收集并维护数据集的元统计，优化器读取这些数据来估算开销（并不读取原始向量数据）：
+存储管理器会持续收集并维护数据集的元统计，优化器读取这些数据来估算开销（并不读取原始向量数据）：
 
-> - 向量库总条数、向量维度
-> - 元数据统计：每个过滤字段的基数、值分布
-> - 硬件统计：磁盘读取延迟、内存带宽、CPU 算力
-> - 索引统计：IVF 的聚类簇数量、每个簇里面向量数量；HNSW 的图节点度数；PQ 量化残差分布
+- 向量库总条数、向量维度
+- 元数据统计：每个过滤字段的基数、值分布
+- 硬件统计：磁盘读取延迟、内存带宽、CPU 算力
+- 索引统计：IVF 的聚类簇数量、每个簇里面向量数量；HNSW 的图节点度数；PQ 量化残差分布
 （这些索引统计不是查询的时候临时聚类算出来的，是建索引阶段一次性算好、之后持续维护，保存在存储管理器里的元数据。是离线训练建索引的时候就固定生成的，查询阶段不重新聚类。优化器的候选方案，只能在已经建好的索引里面挑选。）
 
-例子：过滤的选择 → 如果过滤后向量很少，选预过滤；过滤效果弱，选后过滤
+#### 例子：过滤的选择 → 如果过滤后向量很少，选预过滤；过滤效果弱，选后过滤
 
 过滤的实现：
-> On the other hand, modifying the index scan operator to account for attribute predicates can degrade index performance. It remains unclear how to support “hybrid” queries over both attributes and vectors in a way that is both efficient and accurate.
+> On the other hand, modifying the index scan operator to account for attribute predicates can degrade index performance. It remains unclear how to support “hybrid” queries over both attributes and vectors in a way that is both efficient and accurate.
 
 混合查询：同时带有向量相似度检索 + 布尔属性谓词（元数据过滤）
 
-> If the search is index-supported, then there needs to
-be a mechanism to inform the index that certain vectors
-are filtered out. For pre-filtering, block-first scan works
-by “blocking” out vectors in the index before the scan
-is conducted [133,125,61]. The scan itself proceeds as
-normal but over the non-blocked vectors. For singlestage filtering, visit-first scan works by scanning the
-index as normal, but meanwhile checking each visited
-vector against the predicate conditions [136].
+> If the search is index-supported, then there needs to be a mechanism to inform the index that certain vectors are filtered out. For pre-filtering, block-first scan works by “blocking” out vectors in the index before the scan is conducted. The scan itself proceeds as normal but over the non-blocked vectors. For singlestage filtering, visit-first scan works by scanning the index as normal, but meanwhile checking each visited vector against the predicate conditions.
 
 - 方案 A（后过滤）：先用向量索引拿出 Top-k，再做元数据布尔谓词过滤 → 容易出现结果不够 k 条（召回不足）→ 频繁回溯重新历遍
- > For low-selectivity predicates, visit-first scan can be
-faster than online blocking because there is no need
-to block the vectors beforehand. But if the predicate
-is highly selective, then visit-first scan risks frequent
-backtracking as the scan struggles to fill the result set.
-> 
-> 1.One way to avoid backtracking is to infuse the scan
-operator with a traversal mechanism that incorporates
+> For low-selectivity predicates, visit-first scan can be faster than online blocking because there is no need to block the vectors beforehand. But if the predicate is highly selective, then visit-first scan risks frequent backtracking as the scan struggles to fill the result set.
+
+> 1.One way to avoid backtracking is to infuse the scan operator with a traversal mechanism that incorporates
 attribute information → 不再是单纯后过滤，兼顾前过滤和后过滤，即single-stage filtering，缺点：索引遍历逻辑更复杂，需要改造扫描 / 图遍历代码，不能直接用原生 HNSW
-> 
-> 2.In VDBMSs that use post-filtering, this is
-often mitigated by retrieving αk nearest vectors instead
-of just the k nearest. But higher α make search more
-expensive, and there is no clear way for deciding on
-the optimal value which minimizes search cost while
-guaranteeing k results in the final result set.
+
+> 2.In VDBMSs that use post-filtering, this is often mitigated by retrieving αk nearest vectors instead of just the k nearest. But higher α make search more expensive, and there is no clear way for deciding on the optimal value which minimizes search cost while guaranteeing k results in the final result set.
 
 - 方案 B：前过滤（提前把向量打包批量预处理）
-  > ① Online Blocking. For online blocking, the aim is to
-perform the blocking as efficiently as possible in order to
-minimize the impact on query latency. In AnalyticDBV [133] and Milvus [12,125], a technique using bitmasks
-is given. A bitmask is constructed using traditional attribute filtering techniques. Then, during index scan, a
-vector is quickly checked against the bitmask to determine whether it is “blocked”.
+> ① Online Blocking. For online blocking, the aim is to perform the blocking as efficiently as possible in order to minimize the impact on query latency. In AnalyticDBV and Milvus, a technique using bitmasks is given. A bitmask is constructed using traditional attribute filtering techniques. Then, during index scan, a vector is quickly checked against the bitmask to determine whether it is “blocked”.
 
-> ② Offline Blocking. For graph-based indexes, blocking
-can cause the graph to become disconnected, as shown
-in Figure 9. In Filtered-DiskANN [61], the aim is to
-prevent disconnections in the first place by strategically
-adding edges based on the attribute category of adjoining nodes.
-> → In Milvus [12,125], S is pre-partitioned along attributes that are expected to be predicate targets. When
-a query arrives, it can then be executed on the relevant
-partition using a normal index scan.
-> Q：为什么online blocking不用补边？
-> Online Blocking不改变图结构，不参与距离计算打分，但是仍可以用来作为中间点跳转，但是要访问很多无效结点，会拉高查询延迟，这也是说 online‑blocking 目标是minimize the impact on query latency的由来
-- 前过滤的问题：
-1. 索引结构原本是按照向量空间距离构建的，不是按照元数据划分
+> ② Offline Blocking. For graph-based indexes, blocking can cause the graph to become disconnected, as shown in Figure 9. In Filtered-DiskANN, the aim is to prevent disconnections in the first place by strategically adding edges based on the attribute category of adjoining nodes. → In Milvus, S is pre-partitioned along attributes that are expected to be predicate targets. When a query arrives, it can then be executed on the relevant partition using a normal index scan.
+
+Q：为什么online blocking不用补边？
+
+Online Blocking不改变图结构，不参与距离计算打分，但是仍可以用来作为中间点跳转，但是要访问很多无效结点，会拉高查询延迟，这也是说 online‑blocking 目标是minimize the impact on query latency的由来
+
+前过滤的问题：
+
+① 索引结构原本是按照向量空间距离构建的，不是按照元数据划分
 
 IVF 的簇、HNSW 的图，聚类 / 建图只依据向量相似度，元数据是独立附属信息。检索时每一条候选都额外增加一次布尔判断，增加 CPU 开销。
-2. 索引的局部性被破坏
+
+② 索引的局部性被破坏
 
 同一个簇 / 图邻居里的向量，元数据分布是杂乱的。检索过程中频繁跳过大量不满足谓词的向量，大量距离计算、内存读取变成无效工作。
-3. 索引的预计算统计失效
+
+③ 索引的预计算统计失效
 
 原本优化器依赖的簇大小、图节点度数这些索引统计，在叠加属性谓词之后，预估的代价、召回模型不准。
 
 **没有办法同时做到【检索快 + 召回 / 结果数量准确】**，这个问题目前仍然没有清晰、完美的解决办法。
 
-3.启发式规则属于优化过程中的剪枝策略，RBO 与 CBO 均可使用。启发式规则依靠领域经验直接剔除明显低效或不可行的执行方案，减少候选计划数量；例如数据量较小时直接采用暴力扫描、剔除不支持对应距离度量的索引方案。
+4. **启发式规则**属于优化过程中的剪枝策略，RBO 与 CBO 均可使用。启发式规则依靠领域经验直接剔除明显低效或不可行的执行方案，减少候选计划数量；例如数据量较小时直接采用暴力扫描、剔除不支持对应距离度量的索引方案。
 
-二者的区别在于：RBO 以启发式阈值规则作为**最终决策依据**；CBO 仅将启发式作为前置剪枝手段，剩余候选方案仍需要通过代价模型估算开销选出最优计划。
+   二者的区别在于：RBO 以启发式阈值规则作为最终决策依据；CBO 仅将启发式作为前置剪枝手段，剩余候选方案仍需要通过代价模型估算开销选出最优计划。
 
-4. **转为物理算子，发起检索**
-逻辑计划翻译成可执行的物理代码算子：
-   - 查询处理器会向存储管理器发起请求：把需要的索引 / 向量数据加载到内存**
+5. **转为物理算子，发起检索**
+逻辑计划翻译成可执行的物理代码算子：查询处理器会向存储管理器发起请求：把需要的索引 / 向量数据加载到内存0
 
-## 阶段 2：【存储管理器】响应请求（内存 + 磁盘 IO）
+### 阶段 2：【存储管理器】响应请求（内存 + 磁盘 IO）
 
 任务：负责数据 / 索引的存放、加载、持久化
 
@@ -287,7 +247,7 @@ IVF 的簇、HNSW 的图，聚类 / 建图只依据向量相似度，元数据�
 3. 如果缓存没有 → 从磁盘（SSD）读取对应的数据页，加载进内存，然后交给查询处理器；
 4. 同时还要管理：向量、索引在磁盘上怎么组织、数据持久化（新增向量时，把向量和索引写入磁盘保存，断电不丢失）
 
-## 阶段 3：回到查询处理器，完成计算
+### 阶段 3：回到查询处理器，完成计算
 
 拿到存储管理器送来的索引和向量数据后：
 
@@ -302,30 +262,25 @@ IVF 的簇、HNSW 的图，聚类 / 建图只依据向量相似度，元数据�
 > 2. **索引是单独额外构建出来的一套导航结构**。索引不会改动原始向量的物理存放位置，索引记录的是：向量 ID、簇归属、节点连接关系（HNSW）等元信息，用来**跳过大量不需要比对的向量**。
 
 实现目标：
-> (c, k)-Search Queries. Most VDBMSs support “nearest neighbor” queries, where the aim is to retrieve vectors from S that are physical neighbors of q in the vector space. These queries may aim to return exact or
-approximate nearest neighbors, and may also specify
-the number of neighbors to return. We refer to these as
-(c, k)-search queries, where c indicates the approximation degree and k is the number of neighbors.
-> Out of these, most VDBMSs support the approximate
-k-nearest neighbors (ANN) query, which returns k vectors from S that are within a radius, centered over q, of
-c times the distance between q and its closest neighbor.
-> Note: 很多工程向量库是在索引构建阶段调参间接控制近似程度，而不是让用户在查询时直接传 c。这是理论层面对查询的形式化定义，不是工程 API 参数。
-> 确定性硬保证(任何数据集、查询，输出一定满足 \(dist \le c\cdot d^*\)),这类理论算法复杂度很高，工程向量库几乎不实现，只存在算法论文。
+> (c, k)-Search Queries. Most VDBMSs support “nearest neighbor” queries, where the aim is to retrieve vectors from S that are physical neighbors of q in the vector space. These queries may aim to return exact or approximate nearest neighbors, and may also specify the number of neighbors to return. We refer to these as (c, k)-search queries, where c indicates the approximation degree and k is the number of neighbors. Out of these, most VDBMSs support the approximate k-nearest neighbors (ANN) query, which returns k vectors from S that are within a radius, centered over q, of c times the distance between q and its closest neighbor.
 
-### 3.1 扁平索引/暴力索引KNN：最简单的索引
+Note: 很多工程向量库是在索引构建阶段调参间接控制近似程度，而不是让用户在查询时直接传 c。这是理论层面对查询的形式化定义，不是工程 API 参数。
+确定性硬保证(任何数据集、查询，输出一定满足 dist <= c* d^*),这类理论算法复杂度很高，工程向量库几乎不实现，只存在算法论文。
+
+### 3.1 扁平索引 / 暴力索引 KNN：最简单的索引
 
 > 扁平索引之所以被称为“扁平”，是因为我们不会对输入的向量进行任何修改。由于不对向量进行近似或聚类，这些索引能产生最准确的结果。我们能获得完美的搜索质量，但这是以显著的搜索时间为代价的。
->
+
 > 使用扁平索引时，我们引入查询向量 x_q，并将其与索引中的每个其他完整向量进行比较，计算与每个向量的距离。
->
+
 > 在计算完所有这些距离后，我们会返回其中最近的 k 个向量作为最匹配的结果，这就是 k 近邻（kNN）搜索。可以看成 c=1 的特例，返回严格真实最近邻。
 
-**如何加快搜索速度呢？主要有两种方法：**
+> **如何加快搜索速度呢？主要有两种方法：**
 
-1. 通过降维或减少表示向量值的比特数来减小向量大小。
-2. 通过基于某些属性、相似性或距离对向量进行聚类或将其组织成树结构来缩小搜索范围，将搜索限制在最接近的聚类中，或者通过最相似的分支进行筛选。
+> 1. 通过降维或减少表示向量值的比特数来减小向量大小。
+> 2. 通过基于某些属性、相似性或距离对向量进行聚类或将其组织成树结构来缩小搜索范围，将搜索限制在最接近的聚类中，或者通过最相似的分支进行筛选。
 
-使用这两种方法中的任何一种，都意味着我们不再进行详尽的最近邻搜索，而是进行近似最近邻（ANN）搜索，因为我们不再搜索整个高分辨率数据集。
+> 使用这两种方法中的任何一种，都意味着我们不再进行详尽的最近邻搜索，而是进行近似最近邻（ANN）搜索，因为我们不再搜索整个高分辨率数据集。
 
 ### 3.2 向量预处理手段 / 编码技术
 
@@ -334,12 +289,12 @@ c times the distance between q and its closest neighbor.
 #### 3.2.1 随机投影
 
 > 随机投影的基本思想是使用随机投影矩阵将高维向量投影到低维空间。我们创建一个随机数矩阵，矩阵的大小将是我们想要的目标低维值。然后计算输入向量与矩阵的点积，得到一个投影矩阵，其维度比原始向量少，但仍然保留了它们的相似性。
->
+
 > 当我们进行查询时，使用相同的投影矩阵将查询向量投影到低维空间。然后，将投影后的查询向量与数据库中的投影向量进行比较，找到最近邻。由于数据的维度降低了，搜索过程比在整个高维空间中搜索要快得多。
->
+
 > 请记住，随机投影是一种近似方法，投影质量取决于投影矩阵的属性。一般来说，投影矩阵越随机，投影质量就越好。然而，生成真正的随机投影矩阵在计算上可能会很昂贵，特别是对于大型数据集。
 
-#### 3.2.2 乘积量化 Product Quantization, PQ
+#### 3.2.2 乘积量化 Product Quantization（PQ）
 
 属于向量量化 VQ 的一种：（常搭配 IVF 等一起使用）
 
@@ -359,13 +314,13 @@ c times the distance between q and its closest neighbor.
 
    一条向量 X 最终存储的编码，就是这一串索引号：
 
-   `[j0, j1, j2, ..., jm-1]`
+> `[j0, j1, j2,..., jm-1]`
 
    对于任意原始子向量，不存浮点数，只保存离它最近的聚类中心的编号（索引）。
 
    → 向量之间的区分能力下降，空间里点的重叠变多，计算相似度的时候会出现误差 → 搜索召回 / 准确率下降。
 
-#### 3.2.3 标量量化 Scalar Quantization, SQ
+#### 3.2.3 标量量化 Scalar Quantization（SQ）
 
 - 拆分方式：按维度单独拆，每一维独立量化
 - 划分依据：预先划定数值区间
@@ -387,11 +342,11 @@ k-means 聚类 → Voronoi 划分（IVF）；学习哈希。
 
 **聚类算法：**
 
-##### ① K-means
+#### 3.3.1 K-means
 
 无监督聚类算法。无监督 = 不需要给数据打标签，自动把相似的数据归成一类。
 
-**核心目标**：给定一堆数据，算法自动找出预设的 K 个簇中心（质心）。
+**核心目标**：给定数据，算法自动找出预设的 K 个簇中心（质心）。
 
 **简单步骤：**
 
@@ -410,57 +365,53 @@ k-means 聚类 → Voronoi 划分（IVF）；学习哈希。
 
 但工程上代价可控，多次跑取最优质心就可以缓解。
 
-##### ② 基于密度的空间聚类算法（DBSCAN）
+#### 3.3.2 基于密度的空间聚类算法（DBSCAN）
 
 > DBSCAN 算法基于密度可达性和密度连通性的概念。它从数据集中的任意一个点开始，如果在给定半径 eps 内，该点周围至少有 minPts 个点，就会创建一个新的聚类。这里的 eps 代表 epsilon，是用户定义的输入参数，表示两个点在同一聚类中时，它们之间的最大距离；而 minPts 指的是形成一个聚类所需的最少数据点数量。
->
+
 > 它会迭代地将 eps 半径内所有直接可达的点添加到聚类中。这个过程会一直持续，直到没有更多的点可以添加到这个聚类中。然后，算法会继续处理数据集中下一个未访问过的点，并重复上述过程，直到所有点都被访问过。
->
+
 > DBSCAN 算法中的关键参数是 eps 和 minPts，它们分别定义了点的聚类范围和形成聚类所需的最小点密度。
 
 > **Note：**
->
-> 最后剩下始终没有被任何聚类吸纳的点，就是噪声。
->
-> **参数 eps、minPts 的权衡（考点）**
->
-> 1. eps 太大：距离很远的点都算邻居，很多簇合并成一大团，聚类数量变少；eps 太小：只有挨得极近才算邻居，大片点直接被判定成噪声，簇被拆碎。
-> 2. minPts 越大：要求局部点的密度更高，不容易形成聚类，更多点变成噪声；minPts 越小：很低密度就能形成簇，容易把零散噪声也打包成聚类。
+最后剩下始终没有被任何聚类吸纳的点，就是噪声。
+
+**参数 eps、minPts 的权衡**
+
+1. eps 太大：距离很远的点都算邻居，很多簇合并成一大团，聚类数量变少；eps 太小：只有挨得极近才算邻居，大片点直接被判定成噪声，簇被拆碎。
+2. minPts 越大：要求局部点的密度更高，不容易形成聚类，更多点变成噪声；minPts 越小：很低密度就能形成簇，容易把零散噪声也打包成聚类。
 
 Note：
 - DBSCAN 密度聚类：簇大小不均衡，有的桶极大、有的几乎空桶，检索性能不可控
 - 层次聚类：计算开销巨大，高维海量向量不适合
 
-所以在 VDB 的索引里，几乎只有 k-means（变体 kmeans++）被大规模广泛使用。
+**所以在 VDB 的索引里，几乎只有 k-means（变体 kmeans++）被大规模广泛使用。**
+
 ---
 
+### 3.4 基于树的向量索引方法
 
-### 3.3 基于树的向量索引方法
+基于树的方法对于低维数据非常有效，并且可以提供精确的最近邻搜索。然而，由于“维度诅咒”，它们在高维空间中的性能通常会下降。此外，它们需要大量内存，对于大型数据集效率较低，这会导致构建时间更长和延迟更高。
 
-> 基于树的方法对于低维数据非常有效，并且可以提供精确的最近邻搜索。然而，由于“维度诅咒”，它们在高维空间中的性能通常会下降。此外，它们需要大量内存，对于大型数据集效率较低，这会导致构建时间更长和延迟更高。
->
 > Curse of Dimensionality
 
-> When D grows beyond
-around 10 dimensions, and when the dimensions are
-independent and identically distributed, the Euclidean
-distances between the two farthest and two nearest vectors approach equality as the variance nears zero
+> When D grows beyond around 10 dimensions, and when the dimensions are independent and identically distributed, the Euclidean distances between the two farthest and two nearest vectors approach equality as the variance nears zero
 
-**大数定律**：
-独立同分布随机变量 \(Z_1,Z_2,\dots,Z_d\)：
+  **大数定律**：
+  独立同分布随机变量 Z₁,Z₂,…,Z_d：
 
-\(\bar Z_d=\frac1d\sum_{i=1}^d Z_i \xrightarrow{P} \mathbb E[Z]\)
+  $\bar Z_d = \frac1d \sum_{i=1}^d Z_i \xrightarrow{P} E[Z]$
 
-样本均值收敛到期望。
+  样本均值收敛到期望。
 
-→ 当 \(d\to\infty\)：
+  → 当 d 趋近无穷大时：
+  $\frac1d \sum_{i=1}^d Z_i^2 \xrightarrow{P} E[Z_i^2] = 常数$
 
-\(\frac1d\sum_{i=1}^d Z_i^2 \xrightarrow{P} \mathbb E[Z_i^2] = \text{常数}\)
+  $||X-Y||^2 \approx d \cdot E[Z_i^2]$
 
-\(\|X-Y\|^2 \approx d\cdot \mathbb E[Z_i^2]\)
-两点之间距离平方，**几乎必然趋近于一个和 d 成正比的确定值**。
+  两点之间距离平方，**几乎必然趋近于一个和 d 成正比的确定值**。
 
-> 证明：？
+
 
 **本质：空间划分 + 层次剪枝**
 
@@ -476,29 +427,20 @@ distances between the two farthest and two nearest vectors approach equality as
 2. **动态更新差**：新增 / 删除向量，树结构容易失衡，往往需要完整重建索引，不适合频繁写入的业务；
 3. **召回上限不如图索引 HNSW。**
 
-> For tree-based indexes, the main consideration is the
-design of the splitting strategy used to recursively split
-S into a search tree.
+> For tree-based indexes, the main consideration is the design of the splitting strategy used to recursively split S into a search tree.
 
-树的分类：
+## 树的分类：
 
-检索类型：
-> Most trees are able to return exact query results by
-performing backtracking, where neighboring leaf nodes
-are also checked during the search. However, this is inefficient [132], and they are more often used for returning
-approximate results using defeatist search [48]. In this
-procedure, the tree is traversed down to the leaf level,
-and all vectors within the leaf covering q are returned
-immediately as the nearest neighbors. There is no backtracking, and the complexity is O(D log N).
+#### 检索类型：
+> Most trees are able to return exact query results by performing backtracking, where neighboring leaf nodes are also checked during the search. However, this is inefficient, and they are more often used for returning approximate results using defeatist search. In this procedure, the tree is traversed down to the leaf level, and all vectors within the leaf covering q are returned immediately as the nearest neighbors. There is no backtracking, and the complexity is O(D log N).
 
-#### 精确最近邻树索引
+1. 精确最近邻树索引:
+不属于前文所说 ANN，带有回溯剪枝，只把不可能的情况舍去，仍是精确 KNN。
 
-> 不属于前文所说 ANN，带有回溯剪枝，只把不可能的情况舍去，仍是精确 KNN。
-#### 近似树索引
+2. 近似树索引:
+不做回溯，人为舍弃可能存在近邻的区域。
 
-> 不做回溯，人为舍弃可能存在近邻的区域。
-
-划分范式：
+#### 划分范式：
 
 1. Partitioning Tree：递归地把整个向量空间（或者当前节点内的向量集合）拆成互不重叠的子集，构建出一棵层次树
 
@@ -506,68 +448,67 @@ immediately as the nearest neighbors. There is no backtracking, and the complex
 
 1）Non-Random Trees
 
-2) Random Trees
+2） Random Trees
 
-Principal Component Trees：A principal component tree is a k-d tree that is constructed by first rotating S so that the axes are aligned with the principal
-components of S. The principal dimensions need to be
-found beforehand using principal component analysis
-(PCA)
+> Principal Component Trees：A principal component tree is a k-d tree that is constructed by first rotating S so that the axes are aligned with the principal components of S. The principal dimensions need to be found beforehand using principal component analysis (PCA)
 
-Random Projection Trees：random splitting planes can be used to adapt to the intrinsic dimensionality without expensive PCA.
+> Random Projection Trees：random splitting planes can be used to adapt to the intrinsic dimensionality without expensive PCA.
 
 2. pivot-based trees:选一个数据点当参考，用样本到这个支点的距离来划分空间、做剪枝。
 
+#### 3.4.2.1 KD-Tree
 
-##### ① KD-Tree
-
-1. 选一个维度。
+1. 选一个维度（优先选当前子集方差最大那一维）。
 2. 这个维度的中位数作为分割线，把数据分成左右两部分。
 3. **关键剪枝**：计算查询点到分割线的距离。如果这个距离大于当前已经找到的最近点距离，说明另外一侧子树不可能存在更近点，可以直接丢弃整棵子树。
 4. 递归对左右两部分继续重复，直到叶子节点存少量向量。
 
-→ 改进：High-D tree-based indexes tend to rely on randomization for performing node splits.
-##### ② PKD-Tree
-1. 在节点做 PCA，把向量投影到随机挑选的几个主成分方向；
+→ 改进：High-D tree-based indexes tend to rely on randomization for performing node splits.
+
+#### 3.4.2.2 PKD-Tree
+1. 在节点（把当前节点的所有向量拼成矩阵）做 PCA，把向量投影到最大主成分方向；
 2. 在投影后的一维上取中位数切分，二叉划分；
 3. 融合了随机投影 + KD 树的中位数分割。
 
-> In particular, “Fast
-Library for ANN” (FLANN) [15,96] combines randomization with learned partitioning via principal component analysis (PCA), extending the PKD-tree technique
->
+> In particular, “Fast Library for ANN” (FLANN) combines randomization with learned partitioning via principal component analysis (PCA), extending the PKD-tree technique → 随机挑选的几个主成分方向
+
 Note：普通 KD 树低维可以做精确 KNN；高维场景下 PKD-Tree 在 FLANN 里作为 ANN 索引使用以换取速度。
 
-##### ③ RP-Tree
-划分规则：生成一个 d 维向量，每个分量独立从标准正态分布 \(N(0,1)\) 采样，归一为单位投影向量，把全部向量点乘投影到这条直线上，\(proj(\boldsymbol{x})=\boldsymbol{x}\cdot \boldsymbol{r}\)，把 d 维向量压缩成一个标量（一维数值）；在投影后的一维取中位数进行二分。
+#### 3.4.2.3 RP-Tree
+划分规则：生成一个 d 维向量，每个分量独立从标准正态分布 N(0,1) 采样，归一为单位投影向量，把全部向量点乘投影到这条直线上，proj(x) = x * r，把 d 维向量压缩成一个标量（一维数值）；在投影后的一维取中位数进行二分。
 
 > Q：为什么选择正态分布：
-> 高维空间里，正态采样归一后的向量，均匀分布在单位超球面，各个方向机会均等，不会偏向坐标轴。
-如果直接在\([-1,1]\)均匀采样，向量会集中在立方体的角上，投影方向有偏差。
+高维空间里，正态采样归一后的向量，均匀分布在单位超球面，各个方向机会均等，不会偏向坐标轴。
+如果直接在[-1,1]均匀采样，向量会集中在立方体的角上，投影方向有偏差。
 
-建树和查询，必须复用当时建树保存的那根随机向量 \(\boldsymbol{r}\),\(proj(q)\) 和该节点保存的中位数阈值大小，属于ANN
+建树和查询，必须复用当时建树保存的那根随机向量 r,proj(q) 和该节点保存的中位数阈值大小，属于ANN
 
 随机投影并非彻底消除维数灾难，而是通过构造PCA局部方差最大方向/混合所有维度的随机投影方向，避免 KD 树仅依赖单一原始坐标轴划分带来的缺陷。投影将高维向量映射为一维标量，必然损失信息；Johnson–Lindenstrauss 引理保证，在高概率下向量间的相对距离可以近似保留。但单次投影仍存在误划分风险，因此 PKD-Tree、RP-Tree 通常构建多树森林，用多组独立随机投影来抵消单次投影带来的信息丢失，提升召回。
 
-##### ② Ball-Tree
+#### 3.4.2.4 Ball-Tree
 
 1. 选一个中心点，把所有向量包进一个超球；
 2. 选两个相距最远的点作为两个子球中心；
 3. 查询点到球心距离 − 球半径 > 当前找到的最小距离 → 这个球里面不可能存在更近的点，直接整颗球丢弃，不用遍历内部向量；
 4. 递归，每个子球继续拆分。
 
-##### ③ M-Tree
-M-tree 是**为数据库量身设计的 pivot 树**！
+#### 3.4.2.5 M-Tree
+M-tree 是**为数据库量身设计的 pivot 树**
 
 - 建树：每个节点选一个支点 pivot 作为球心，记录覆盖半径；这个节点下所有数据点到 pivot 的距离 ≤ 半径。
 - 核心特色：原生设计支持动态更新（插入、删除向量）。
 - 划分：新增点放到距离最近的支点对应的子球；球放不下就分裂节点。
-- 剪枝：同样三角不等式，但是节点结构为磁盘存储优化（数据库 B 树风格，分页）。
+- 剪枝：同样三角不等式，但是节点结构为磁盘存储优化。（节点大小对齐磁盘页，多叉树，查询时需要访问的磁盘节点数量变少。中间节点只存元数据：支点 pivot、子树半径、子树磁盘地址，不存完整向量，中间节点全部常驻内存）
 - 短板：频繁插入删除会让超球重叠越来越严重，剪枝效率快速下降；高维失效。
 
-> Note：对比 Ball-tree & M-tree
-> Ball-tree：构造时选最远两点分裂超球，偏向静态 ANN 检索，不面向数据库动态更新；
-> M-tree：以支点为球心构建超球，借鉴 B + 树结构，**主打磁盘存储 + 动态增删**，是数据库版本的超球支点树。
+Note：对比 Ball-tree & M-tree
 
-##### ④ VP-Tree
+Ball-tree：
+构造时选最远两点分裂超球，偏向静态 ANN 检索，不面向数据库动态更新；
+
+M-tree：以支点为球心构建超球，借鉴 B + 树结构，主打磁盘存储 + 动态增删，是数据库版本的超球支点树。
+
+#### 3.4.2.6 VP-Tree
 
 1. 随机选一个向量作为优势点 VP；
 2. 计算所有向量到这个 VP 的距离，取中位数距离；
@@ -576,7 +517,7 @@ M-tree 是**为数据库量身设计的 pivot 树**！
 
 ⇒ Ball-Tree、VP-Tree 解决了 KD-Tree 会粗暴切开簇的问题。
 
-##### ④ ANNOY（Approximate Nearest Neighbors Oh Yeah）
+#### 3.4.2.7 ANNOY（Approximate Nearest Neighbors Oh Yeah）
 
 1. 随机选两个向量，生成垂直平分超平面，即到 a 和到 b 距离完全相等的所有点构成的面。
 
@@ -616,9 +557,9 @@ M-tree 是**为数据库量身设计的 pivot 树**！
 
 7. 在候选集合里计算距离，返回 Top-K。
 
-> Annoy 的高效性和内存高效性使其成为处理高维数据和大型数据库的有力选择。不过，也有一些需要考虑的权衡因素。构建索引可能需要花费大量时间，特别是对于大型数据集。由于 Annoy 使用随机森林分区算法，索引无法使用新数据进行更新，必须从头重新构建。根据数据集的大小以及数据变化的频繁程度，重新训练索引的成本可能过高。
+Annoy 的高效性和内存高效性使其成为处理高维数据和大型数据库的有力选择。不过，也有一些需要考虑的权衡因素。构建索引可能需要花费大量时间，特别是对于大型数据集。由于 Annoy 使用随机森林分区算法，索引无法使用新数据进行更新，必须从头重新构建。根据数据集的大小以及数据变化的频繁程度，重新训练索引的成本可能过高。
 
-#### ⑤ K-Means Tree
+#### 3.4.3 K-Means Tree
 1. 根节点：拿到当前节点的全部向量集合
 2. 对集合运行k-means 聚类，聚成`k`个簇，得到`k`个聚类中心
 3. 每个簇单独成为一个子节点，子节点只保存属于这个簇的向量
@@ -634,27 +575,16 @@ M-tree 是**为数据库量身设计的 pivot 树**！
 
 ---
 
-### 3.4 量化方法
+### 3.5 量化方法
 
-> 量化方法在内存利用上效率较高，通过将向量压缩为紧凑的代码来实现快速搜索。但是，这种压缩可能会导致信息丢失，从而降低搜索准确性。另外，这些方法在训练阶段的计算成本较高，会增加构建时间。
+量化方法在内存利用上效率较高，通过将向量压缩为紧凑的代码来实现快速搜索。但是，这种压缩可能会导致信息丢失，从而降低搜索准确性。另外，这些方法在训练阶段的计算成本较高，会增加构建时间。
 
 **核心原理**：对原始高维浮点数向量做有损压缩，把连续取值的向量空间离散化，把量化技术包装成完整检索方案。
 
 **查询步骤：**
-> For IVFADC, many distance calculations are likely
-to be repeated during bucket scan since many vectors
-may share the same PQ centroids. These calculations
-can be avoided by first computing ∥qj − c∥
-2
-for all c ∈
-Uj and for all j ∈ 1 . . . m, where qj is the jth sub-vector
-of q [91]. This preprocessing step takes O(m)O( m
-D K′
-),
-where K′
-is the number of centroids in Uj . But afterwards, ADC can be performed using just m look-ups,
-reducing bucket scan from O(DN) to O(mN)
-> 
+
+> For IVFADC, many distance calculations are likely to be repeated during bucket scan since many vectors may share the same PQ centroids. These calculations can be avoided by first computing ||qj - c||^2 for all c ∈ Uj and for all j ∈ 1... m, where qj is the jth sub-vector of q. This preprocessing step takes O(m * D * Kprime), where K′ is the number of centroids in Uj. But afterwards, ADC can be performed using just m look-ups, reducing bucket scan from O(DN) to O(mN)
+
 1. 查询向量 q 按完全相同的量化规则切分，拿 q_i（q 的第 i 段子向量），和第 i 段码书里全部 K 个中心算距离，保存成一张距离表：
 
    `dis_table[i][j] = 距离 q 的 i 段子向量，第 i 段码书第 j 号中心`
@@ -663,8 +593,8 @@ reducing bucket scan from O(DN) to O(mN)
 
    数据库里面某条向量 X，存的是编码 `[j0, j1, j2, ...]`，还有 X 的 ID。
 
-   * 取 X 编码第 0 位：j0 → 查表 `dis_table[0][j0]`
-   * 取 X 编码第 1 位：j1 → 查表 `dis_table[1][j1]`
+   * 取 X 编码第 0 位：j0 → 查表 `dis_table[j0]`
+   * 取 X 编码第 1 位：j1 → 查表 `dis_table[j1]`
    * 全部段查表，累加，得到 `approx_dist = sum`，估算出来 q 和 X 的相似度。
 
 3. 根据估算距离从小到大排序，选出 Top-K 候选；
@@ -672,26 +602,25 @@ reducing bucket scan from O(DN) to O(mN)
 4. 得到候选的 ID，可以拿到原始向量。
 
 > **Note：**
->
-> 若是纯量化编码的检索算法，只能压缩原始向量和快速估算近似距离，没有空间划分机制，仍需历遍所有向量，但大数据场景需要遍历全部向量，检索效率很低，工程上很少单独使用，通常搭配 IVF 聚类索引组成 IVFPQ 混合索引。
+若是纯量化编码的检索算法，只能压缩原始向量和快速估算近似距离，没有空间划分机制，仍需历遍所有向量，但大数据场景需要遍历全部向量，检索效率很低，工程上很少单独使用，通常搭配 IVF 聚类索引组成 IVFPQ 混合索引。
 
 ---
 
-### 3.5 基于表的方法（哈希方法）
-> table-based indexes such as E2LSH [49], SPANN [44], and IVFADC（即IVFPQ)[69], that are generally easy to update
+### 3.6 基于表的方法（哈希方法）
+> Table-based indexes such as E2LSH, SPANN, and IVFADC (i.e., IVFPQ) are generally easy to update.
+
 核心特征：哈希方法速度快且相对节省内存，它将相似的向量映射到同一个哈希桶中。插入、删除向量只需要修改它所属那一张表，不会改动整个索引全局结构。在处理高维数据和大规模数据集时表现良好，具有较高的吞吐量。
 
-#### 3.5.1 局部敏感哈希（LSH）→ 索引用到的一类哈希，包含多个独立算法
+#### 3.6.1 局部敏感哈希（LSH）→ 索引用到的一类哈希，包含多个独立算法
 
 > LSH 的性能范围很广，在很大程度上取决于设置的参数。搜索速度较慢时能得到较好的结果质量，而快速搜索则会导致结果质量较差。在处理高维数据时性能不佳。条形图中半填充的部分表示修改索引参数时性能的变化范围。
->
-> 局部敏感哈希（LSH）的工作原理是通过一个哈希函数对向量进行处理，将相似的向量分组到同一个桶中，这个哈希函数的目的是最大化哈希冲突，而不是像通常的哈希函数那样最小化冲突。
 
-LSH是Indyk & Motwani 当年奠基 ANN 理论的算法，专门用来实现\((c,k)\) ANN。
+局部敏感哈希（LSH）的工作原理是通过一个哈希函数对向量进行处理，将相似的向量分组到同一个桶中，这个哈希函数的目的是最大化哈希冲突，而不是像通常的哈希函数那样最小化冲突。
 
-- 给定 c，只要哈希函数数量足够多，以很高概率返回满足 \(dist(q,p) \le c\cdot d^*\) 的候选点。不是 100% 一定成功（随机哈希带来的概率性），不是绝对硬性。
+LSH是Indyk & Motwani 当年奠基 ANN 理论的算法，专门用来实现(c,k) ANN。
+
+- 给定 c，只要哈希函数数量足够多，以很高概率返回满足 dist(q,p) <= c* d^* 的候选点。不是 100% 一定成功（随机哈希带来的概率性），不是绝对硬性。
 - 缺点： 查询 / 建库开销大；高维 embedding 场景召回、延迟表现不如 HNSW；
-
 
 最大化冲突：
 
@@ -703,7 +632,7 @@ LSH是Indyk & Motwani 当年奠基 ANN 理论的算法，专门用来实现\((c,
 
 > 在我们的字典中，我们希望避免这些冲突，因为这意味着多个对象会映射到同一个键上。但对于 LSH 来说，我们希望最大化哈希冲突。
 
-> **为什么我们想要最大化冲突呢？**
+> 为什么我们想要最大化冲突呢？
 
 > 嗯，为了进行搜索，我们使用 LSH 将相似的对象分组在一起。当我们引入一个新的查询对象（或向量）时，我们的 LSH 算法可以用来找到最匹配的组：
 
@@ -731,130 +660,110 @@ LSH是Indyk & Motwani 当年奠基 ANN 理论的算法，专门用来实现\((c,
    * 点积 ≥ 0 → 输出 1；否则输出 0。
 
 ⭐如何判断LSH的检索效果：
-> \(p_1\)：近邻点落入同一个哈希桶的概率
-> \(p_2\)：远点落入同一个哈希桶的概率
+
+p1：近邻点落入同一个哈希桶的概率
+
+p2：远点落入同一个哈希桶的概率
 
 即LSH 设计目标为：p_1尽量大，p_2尽量小
 
-## \(\rho=\frac{\log p_1}{\log p_2}\)
+> $\rho = \frac{\log(p_1)}{\log(p_2)}$
 
-\(\rho\) 是 LSH 的核心理论指标，直接决定 LSH 查询复杂度。→ \(\rho\)越小，LSH 检索效率越好
+$\rho$ 是 LSH 的核心理论指标，直接决定 LSH 查询复杂度。→ $\rho$ 越小，LSH 检索效率越好
 
 3. 为提升效果（和 ANNOY 一样合并候选，弥补单次划分的失误）：
-> The table is constructed by hashing each x ∈ S into
-each of the L hash tables using g1 . . . gL. Typically, L is
-set to L = O(1/pK
-1
-) with K set to ⌈log1/p2 N⌉ [32]. The
-exact value depends on the accuracy and performance
-needs of the application, and some sample curves are
-shown in [30]. Letting ρ = log(1/p1)/ log(1/p2) yields
-L = O(Nρ/p1). The storage complexity is O(LDN)
-which is O(DN1+ρ
-) after substitution. In the practical
-case where p1 > p2, the value of ρ is between 0 and 1.
-Fig. 3 Constructing and searching an LSH index.
-When a query appears, it is hashed using the L hash
-functions sampled from G, and collisions are kept as
-candidate neighbors. The candidates are then re-ranked
-or discarded based on true distances to q. Figure 3 illustrates this procedure. The query complexity is dominated by the L hash evaluations, which is O(DNρ
-).
+> The table is constructed by hashing each x ∈ S into each of the L hash tables using g1... gL. Typically, L is set to L = O(1 / p1^K) with K set to ceil(log(N) / log(1 / p2)). The exact value depends on the accuracy and performance needs of the application, and some sample curves are shown in the figure. Letting ρ = log(1/p1)/ log(1/p2) yields L = O(N^rho / p1). The storage complexity is O(LDN) which is O(D * N^(1 + rho)) after substitution. In the practical case where p1 > p2, the value of ρ is between 0 and 1. Fig. 3 Constructing and searching an LSH index. When a query appears, it is hashed using the L hash functions sampled from G, and collisions are kept as candidate neighbors. The candidates are then re-ranked or discarded based on true distances to q. Figure 3 illustrates this procedure. The query complexity is dominated by the L hash evaluations, which is O(D * N^rho).
 
-\(L = O(1/p_1^K)\)，\(K=\lceil \log_{1/p_2}N \rceil\)
+$L = O\left(\frac{1}{p_1^K}\right),\quad K = \left\lceil \frac{\log(N)}{\log(1/p_2)} \right\rceil$
+
 - K：每一条 hash key 由 K 个基础哈希拼接
 - L：哈希表的数量（独立哈希组的数量）
-  
-> 多哈希表 LSH：用 L 套独立哈希，一次性生成多个随机向量，把多个独立的哈希函数计算结果拼接，组成哈希码；只要任意一套哈希命中同一桶，就把该向量加入候选。用来提升召回，弥补串联 K 个哈希后\(p_1\)下降的问题
-> One of the main criticisms of LSH is that the storage
-cost can be large due to the use of multiple hash tables.
+
+多哈希表 LSH：用 L 套独立哈希，一次性生成多个随机向量，把多个独立的哈希函数计算结果拼接，组成哈希码；只要任意一套哈希命中同一桶，就把该向量加入候选。用来提升召回，弥补串联 K 个哈希后p1下降的问题
+> One of the main criticisms of LSH is that the storage cost can be large due to the use of multiple hash tables.
 
 4. LSH 概率可证明保证c
-> When r1 is set to minx∈S d(x, q) and r2 is set to
-cr1, the c guarantee is relative to the minimum distance. This is useful when the query is static across the
-workload, but is is hard to generalize over dynamic online queries. Hence for an index designed around some
-given hash family, not all queries may have similar candidate sets, making it hard to control precision and recall.
-哈希函数理论上保证：在半径\(r_1\)内的最近邻，会落在\(r_2=c\cdot r_1\)范围内。c是放大倍数。\(r_1\)是查询向量q到数据集S里真实最近邻的距离。
-> 局限：这个理论保证是建立在已知真实最小距离的前提下。
-> 如果查询是静态固定的，可以预先确定距离；在线动态查询时，事先并不知道真实最近邻距离，这个理论边界不准确。
-> Multi-probe LSH [88] is one attempt at addressing this issue by scanning multiple buckets at a time,
-thereby spreading out the search.
+> When r1 is set to minx∈S d(x, q) and r2 is set to cr1, the c guarantee is relative to the minimum distance. This is useful when the query is static across the workload, but is is hard to generalize over dynamic online queries. Hence for an index designed around some given hash family, not all queries may have similar candidate sets, making it hard to control precision and recall.
+
+哈希函数理论上保证：在半径r1内的最近邻，会落在r2=c* r1范围内。c是放大倍数。r1是查询向量q到数据集S里真实最近邻的距离。
+
+局限：这个理论保证是建立在已知真实最小距离的前提下。
+如果查询是静态固定的，可以预先确定距离；在线动态查询时，事先并不知道真实最近邻距离，这个理论边界不准确。
+> Multi-probe LSH is one attempt at addressing this issue by scanning multiple buckets at a time, thereby spreading out the search.
+
 即为避免真实最近邻和q落在不同桶，不同查询召回不稳定，不仅扫描q直接映射的桶，也扫描相邻的哈希桶
 
-#### 3.5.2 常见哈希算法
-> We mention a few popular LSH schemes. The first
-two are data independent and require no rebalancing.
-– E2LSH. Each g is an O(D) projection onto a random
-hyperplane. This achieves ρ < 1/c [49].
+#### 3.6.2 常见哈希算法
+> We mention a few popular LSH schemes. The first two are data independent and require no rebalancing. 
+
+> – E2LSH. Each g is an O(D) projection onto a random hyperplane. This achieves ρ < 1/c.
+
 哈希函数g的构造：随机超平面投影。
 
-生成一个随机超平面，把向量投影到这个平面上，根据投影符号（正 / 负）做二值划分，完成哈希。单次投影计算复杂度\(O(D)\)，D 是向量维度。
+生成一个随机超平面，把向量投影到这个平面上，根据投影符号（正 / 负）做二值划分，完成哈希。单次投影计算复杂度O(D)，D 是向量维度。
 
 特点：数据无关哈希。哈希函数完全随机生成，随机取超平面。
+
 ✅优点：理论简单，证明完备，对任意分布数据都能保证近似检索边界。
-❌缺点：\(\rho\)不够小，想要好召回需要大量哈希表，内存开销大；高维向量效率一般。
-– IndexLSH. This scheme is based on binary projections and is provided by Faiss [4].
-There have also been efforts at designing data dependent
-hash families to yield lower ρ.
+
+❌缺点：$\rho$ 不够小，想要好召回需要大量哈希表，内存开销大；高维向量效率一般。
+
+> – IndexLSH. This scheme is based on binary projections and is provided by Faiss. There have also been efforts at designing data dependent hash families to yield lower ρ.
 - 实现基础：二值投影，Faiss 库内置的 LSH 实现。
 - 原理：同样随机投影，投影结果直接压缩成 0/1 二进制哈希码。
-- 定位：属于工程实现版本的 LSH，基于 E2LSH 这套随机投影思想，依然是数据无关哈希，\(\rho\)理论下限没有突破 E2LSH，只是工程简化实现。
+- 定位：属于工程实现版本的 LSH，基于 E2LSH 这套随机投影思想，依然是数据无关哈希，$\rho$ 理论下限没有突破 E2LSH。
+
 ✅优点：集成在 Faiss，开箱即用；生成二进制哈希，哈希码占用内存很小。
 
-– FALCONN. Implements an LSH hash family based
-on spherical LSH [31]. The dataset is first projected
-onto a unit ball and then recursively partitioned into
-small overlapping spheres. The ρ value is 1/(2c
-2−1)
+> – FALCONN. Implements an LSH hash family based on spherical LSH. The dataset is first projected onto a unit ball and then recursively partitioned into small overlapping spheres. The ρ value is 1/(2c 2−1)
 - 流程：
-  1. 先把全部数据集向量归一化，投影到单位超球（unit ball）上；
-  2. 递归地在单位球上划分出多个互相重叠的小球（overlapping spheres）；
+  1. 先把全部数据集向量归一化，投影到单位超球上；
+  2. 递归地在单位球上划分出多个互相重叠的小球；
   3. 哈希规则：向量落在哪个球，就分到对应的桶。
-- 理论指标：\(\boldsymbol{\rho = \dfrac{1}{2c^2-1}}\)
-✅优点：**数据依赖**，利用数据集分布去构造哈希划分，相比 E2LSH，\(\rho\)显著更低，检索效率更高。
+- 理论指标：$\rho$ = 1 / (2c^2 - 1)
+
+✅优点：数据依赖，利用数据集分布去构造哈希划分，相比 E2LSH，$\rho$ 显著更低，检索效率更高。
+
 ❌缺点：需要预处理、归一化、递归划分；实现更复杂，只适合在单位球面归一化后的向量。
 
-#### 3.5.3 Learning to Hash
-> Learning-based techniques aim to directly learn suitable
-mappings without resorting to hash families. These techniques tend to require lengthy training
-and are sensitive to out-of-distribution updates, and they are not widely supported in VDBMSs
+#### 3.6.3 Learning to Hash
+> Learning-based techniques aim to directly learn suitable mappings without resorting to hash families. These techniques tend to require lengthy training and are sensitive to out-of-distribution updates, and they are not widely supported in VDBMSs
 
 ---
 
-### 3.6 聚类方法
+### 3.7 聚类方法
 
-> 聚类方法可以通过将搜索空间缩小到特定的聚类来加快搜索操作，但搜索结果的准确性可能会受到聚类质量的影响。聚类通常是一个批处理过程，这意味着它不太适合不断添加新向量的动态数据，因为这会导致频繁的重新索引。
+聚类方法可以通过将搜索空间缩小到特定的聚类来加快搜索操作，但搜索结果的准确性可能会受到聚类质量的影响。聚类通常是一个批处理过程，这意味着它不太适合不断添加新向量的动态数据，因为这会导致频繁的重新索引。
 
 **核心原理**：基于 K-means 等聚类算法，把全部库向量划分成若干簇（聚类），每个簇有一个聚类中心（质心）。
 
 1. **建索引**：将所有向量聚类，每个向量归属距离最近的簇；索引保存簇中心，同时记录每个簇内部包含哪些向量。
 2. **查询阶段**：先计算查询向量和各个簇中心的距离，挑选距离最近的少数几个簇；只在选中簇的内部向量中做相似度检索，直接跳过其他全部簇，缩小搜索空间，加快检索速度。
 
-
-#### 3.6.1 倒排文件（IVF）索引
+#### 3.7.1 倒排文件（IVF）索引
 
 > 倒排文件索引（IVF）通过聚类来缩小搜索范围。它是一种非常受欢迎的索引，因为它易于使用，具有较高的搜索质量和合理的搜索速度。
->
+
 > 它基于 Voronoi 图的概念，也称为 Dirichlet 镶嵌。
->
+
 > 为了理解 Voronoi 图，我们需要想象将高维向量放置在二维空间中。然后在二维空间中放置一些额外的点，这些点将成为我们的“聚类”（在我们的例子中是 Voronoi 单元）质心（仍然使用的 K-means）。
->
+
 > 然后，我们从每个质心向外扩展相同的半径。在某个时刻，每个单元圆的圆周会与另一个圆周碰撞，从而形成单元边界：
->
+
 > 现在，每个数据点都将包含在一个单元内，并被分配给相应的质心。
->
+
 > 但是，如果查询向量落在单元的边缘附近，就会出现一个问题：它最接近的其他数据点很可能包含在相邻的单元中。我们称之为边缘问题：
->
+
 > 为了缓解这个问题并提高搜索质量，我们可以增加一个名为 nprobe 的值的索引参数。通过 nprobe，我们可以设置要搜索的单元数量。
 
-
-### 3.6.2 IVF的多种变体
+#### 3.7.2 IVF 的多种变体
 
 ① IVFFLAT
 > IVFFLAT is a simpler form of IVF. It partitions the dataset into clusters. However, within each cluster, it uses a flat structure (hence the name “FLAT”) for storing the vectors. IVFFLAT is designed to optimize the balance between search speed and accuracy.
 
 即最简单的IVF，选出与查询向量距离最近的nprobe个中心，然后在对应的簇内部暴力历遍与查询项链的距离。
 
-quantization-based indexes：
+## quantization-based indexes：
 
 ② IVFPQ、IVFADC
 
@@ -864,71 +773,32 @@ quantization-based indexes：
 
 → 原始向量分布范围大，训练慢、量化误差高，学术界 / 工业界几乎不用；经典 IVFADC (IVFPQ) 一定是残差版本。
 
-> But large K make k-means expensive. Product quantization exploits the fact that the cross product of m
-number of (D/m)-dimensional spaces is a space of D dimensions, so that by setting U =
-Q
-m
-j=1 Ui
-, then U ∈ R
-D
-when Uj ∈ R
-D/m. This means that to yield a count of
-K centroids, only K1/m centroids need to be found per
-Uj . Moreover as each Uj belongs to a lower dimensional
-space, the running time of k-means per Uj is reduced.
-The new complexity is O(m)O( m
-D NK1/mi).
-Each Uj is constructed via k-means over the collection of sub-vectors {(xi)
-jD/m
-i=(j−1)D/m+1 | x ∈ S}
-12, and
-the set of all Uj is known as the “codebook”. Vector
-x is then quantized by splitting it into m sub-vectors,
-x
-′
-j
-, finding the nearest centroid in Uj to x
-′
-j
-for each
-j ∈ 1 . . . m, and then concatenating these centroids.
-Each vector is thus stored using m log2
-(D/m) bits, and
-the time complexity is O(m)O(DK1/m)
+> But large K make k-means expensive. Product quantization exploits the fact that the cross product of m spaces of dimension D/m is a space of dimension D, so by setting U = U1 × U2 × ... × Um, U is in R^D when each Uj is in R^(D/m). This means that to obtain K centroids in the product space, only K^(1/m) centroids need to be found per Uj. Moreover, as each Uj belongs to a lower-dimensional space, the running time of k-means per Uj is reduced. The new complexity is O(m * D * N * K^(1/m)). Each Uj is constructed via k-means over the collection of sub-vectors of x in S, and the set of all Uj is known as the “codebook”. Vector x is quantized by splitting it into m sub-vectors, x1, x2, ..., xm, finding the nearest centroid in Uj to xj for each j = 1...m, and concatenating these centroids. Each vector is stored using m * log2(K) bits, and the time complexity is O(m * D * K^(1/m)).
 
 **Jégou 原始 PQ 论文（2011）+ Faiss 原生 IndexIVFPQ（经典原版）**：
-K-means 聚类分桶后向量减去所属桶的聚类中心得到残差 \(R(x)\)，用残差统一训练PQ码本
+K-means 聚类分桶后向量减去所属桶的聚类中心得到残差 R(x)，用残差统一训练PQ码本
 
 优点：码本拟合全部数据分布，召回更高；缺点：海量数据集时训练 PQ 非常耗时间。
 
 Survey of Vector Database Management Systems by James Jie Pan · Jianguo Wang · Guoliang Li这一篇里面的IVFADC是工程优化版本：
 
-> Training a PQ quantizer over S can still
-be time consuming. To reduce this cost, IVFADC
-first buckets vectors using k-means over a small num￾ber of centroids, and then trains a PQ quantizer by
-sampling a few vectors from each of the buckets.
-To allow a single quantizer to apply to all the buckets, each vector x is normalized by subtracting from
-its bucket key, resulting in a “residual” vector R(x)
-which is then used to train the quantizer. The full
-workflow is shown in Figure 5. During search, query
-13 Also called “lattice” quantization, see [28].
-10 James Jie Pan et al.
-q is directly compared against the quantized vectors in the bucket that q maps onto. As q itself is
-not quantized, the comparison is referred to as an
+> Also called “lattice” quantization.
+
+> Training a PQ quantizer over S can still be time consuming. To reduce this cost, IVFADC first buckets vectors using k-means over a small number of centroids, and then trains a PQ quantizer by sampling a few vectors from each of the buckets. To allow a single quantizer to apply to all the buckets, each vector x is normalized by subtracting from its bucket key, resulting in a “residual” vector R(x) which is then used to train the quantizer. The full workflow is shown in Figure 5. During search, query q is directly compared against the quantized vectors in the bucket that q maps onto. As q itself is not quantized, the comparison is referred to as an
 “asymmetric distance computation” (ADC)（非对称距离计算）.
 
 每个桶采样少量向量训练一套全局 PQ，大幅降低训练开销
 
 Q：为什么采样训练结果不会不准确？
 
-### ① 训练的对象是残差 \(R(x)=x-centroid\)
+##### ① 训练的对象是残差 R(x) = x - centroid
 
 同一个桶内所有向量减去簇中心之后，残差向量都聚集在原点附近，分布很紧凑。
 
 - 原始向量：值域大、分布广，想要拟合分布，需要大量样本；
 - 残差向量：均值接近 0，方差小，分布简单，用少量样本就足以学习到分布的形态，采样偏差很小。
 
-### ② 训练的是全局一套 PQ，不是分桶独立 PQ
+##### ② 训练的是全局一套 PQ，不是分桶独立 PQ
 
 把所有桶采样的样本合在一起，总的训练样本量并不特别小；相当于从整个数据集均匀分层采样，比直接全局随机采样更有代表性。
 
@@ -939,90 +809,51 @@ Q：为什么采样训练结果不会不准确？
 
 ③ IVFSQ
 
-> In IVFSQ, each vector in a cluster is passed through scalar quantization. This means that each dimension of the vector is handled separately.
-> In simple terms, for every dimension of a vector, we set a predefined value or range. These values or ranges help decide which cluster a vector belongs to. Each component of the vector is then matched against these predefined values to find its place in a cluster. This method of breaking down and quantizing each dimension separately makes the process more straightforward. It’s especially useful for lower-dimensional data, as it simplifies encoding and reduces the space needed for storage.
+> In IVFSQ, each vector in a cluster is passed through scalar quantization. This means that each dimension of the vector is handled separately. In simple terms, for every dimension of a vector, we set a predefined value or range. These values or ranges help decide which cluster a vector belongs to. Each component of the vector is then matched against these predefined values to find its place in a cluster. This method of breaking down and quantizing each dimension separately makes the process more straightforward. It’s especially useful for lower-dimensional data, as it simplifies encoding and reduces the space needed for storage.
 
+### 3.8 基于图的方法
 
-### 3.7 基于图的方法
-
-> 基于图的方法在准确性和速度之间取得了较好的平衡。它们对高维数据很有效，并且可以提供高质量的搜索结果。但是，由于需要存储图结构，它们可能会占用大量内存，而且图的构建在计算上也很昂贵。
+基于图的方法在准确性和速度之间取得了较好的平衡。它们对高维数据很有效，并且可以提供高质量的搜索结果。但是，由于需要存储图结构，它们可能会占用大量内存，而且图的构建在计算上也很昂贵。
 
 **核心原理**：把每一条向量作为图的节点；向量之间相似度高，就在对应节点之间建立边，构建一张近邻关系图。
 
 1. **建索引**：遍历向量库，为每个节点和它的相似近邻节点建立连接，保存整张图的邻接关系；部分算法构建多层图，上层做远距离跳转、下层保存精细近邻关系。
 2. **查询**：从图中某个入口节点出发，沿着边贪心游走，不断向距离查询向量更近的节点前进；多次迭代收敛，找到近邻候选，不需要扫描全部向量，兼顾速度与召回率。
 
-#### 3.7.1 KNNG怎么建图 → 基于图的向量检索方法里最核心的一类
-> In a KNNG, each node vi
-is connected to k nodes representing the nearest neighbors to xi
-[56]. For batched
-queries, q can be considered as a member of S, and a
-KNNG built over S allows exact k-NN search in O(1)
-time through a simple look-up.
-A KNNG can also be used to answer interactive
-queries, where q ∈/ S. The basic idea is to recursively
-select node neighbors that are nearest to q, starting
-from initial nodes, and add them into the top-k result
-set. The search complexity depends on the number of
-iterations before the result set converges. The search
-can start from multiple initial nodes, and if there are
-no more node neighbors to select, it can be restarted
-from new initial nodes [122].
-A KNNG can be exact or approximated with a technique which we refer to as “iterative refine”
-> Exact. An exact KNNG can be constructed by performing a brute force search N number of times, giving
-a total complexity of O(DN2
-).
-> Iterative Refine. An approximate KNNG can be obtained by iteratively refining an initial graph. We give
-two examples. → 优化目标是每个点的邻居尽量是真实近邻
->– NN-Descent（KGraph). The NN-Descent (KGraph) method [52]
-begins with a random KNNG and iteratively refines
-it by examining the neighbors of the neighbors of
-each node vi
-, replacing edges to vi with edges to
-these second-order neighbors that are closer. When
-the dataset is growth restricted17, then each iteration is expected to halve the radius around each
+#### 3.8.1 KNNG 怎么建图 → 基于图的向量检索方法里最核心的一类
+> In a KNNG, each node vi is connected to k nodes representing the nearest neighbors to xi. For batched queries, q can be considered as a member of S, and a KNNG built over S allows exact k-NN search in O(1) time through a simple look-up. A KNNG can also be used to answer interactive queries, where q not in S. The basic idea is to recursively select node neighbors that are nearest to q, starting from initial nodes, and add them into the top-k result set. The search complexity depends on the number of iterations before the result set converges. The search can start from multiple initial nodes, and if there are no more node neighbors to select, it can be restarted from new initial nodes.
+
+> A KNNG can be exact or approximated with a technique which we refer to as “iterative refine” 
+
+> Exact. An exact KNNG can be constructed by performing a brute force search N number of times, giving a total complexity of O(DN2 ). 
+
+> Iterative Refine. An approximate KNNG can be obtained by iteratively refining an initial graph. We give two examples. 
+
+→ 优化目标是每个点的邻居尽量是真实近邻
+> – NN-Descent（KGraph）. The NN-Descent (KGraph) method begins with a random KNNG and iteratively refines it by examining the neighbors of the neighbors of each node vi, replacing edges to vi with edges to these second-order neighbors that are closer. When the dataset is growth restricted, then each iteration is expected to halve the radius around each
 node and its farthest neighbor.（半径减半是理想化假设，证明KNNG贪心建图算法迭代轮数是对数级） This property leads
-to fast convergence, with empirical times on the order of O(N2−ϵ
-) for 0 < ϵ < 1.
+> to fast convergence, with empirical times on the order of O(N^(2 - epsilon)) for 0 < ϵ < 1.
 
 迭代求精：用来快速构造近似 KNNG，图里的边不一定是严格真实最近邻，是近似的，牺牲召回换取建图速度
 
 思路:
 1. **初始化**：随机建一张 KNNG。每个节点随便挑 k 个点当邻居。
 2. **迭代求精**：
-对每个节点\(v_i\)，考察它**邻居的邻居（二阶邻居）**。
-如果某个二阶邻居离\(v_i\)更近，就把\(v_i\)原来的边替换成这个更近的点，更新邻接表。
+对每个节点vi，考察它邻居的邻居（二阶邻居）。
+如果某个二阶邻居离vi更近，就把vi原来的边替换成这个更近的点，更新邻接表。
 3. 不断循环迭代，图的质量持续提升，当本轮迭代没有任何节点的邻居列表发生更新时停止
-– EFANNA. Instead of starting from a random KNNG,
-EFANNA18 uses a forest of randomized k-d trees to
-build the initial KNNG. Doing so is shown to lead
-to higher recall and faster construction, as it can
-quickly converge to better local optima.
+> – EFANNA. Instead of starting from a random KNNG, EFANNA uses a forest of randomized k-d trees to build the initial KNNG. Doing so is shown to lead to higher recall and faster construction, as it can quickly converge to better local optima.
 
 先用多棵随机 k-d 树森林，快速给每个节点找一批候选近邻，用这批候选边，搭建初始 KNNG。之后同样执行迭代求精。
 
-> A KNNG is not guaranteed to be connected. Disconnected components complicates the search procedure
-for online queries by requiring restarts to achieve high
-accuracy [101,122]. But by adding certain edges so that
-the graph is connected, it becomes possible to follow a
-single path beginning from any initial node and arriving
-at the nearest neighbor to q.
+#### 3.8.2 MSN 如何建图
+> A KNNG is not guaranteed to be connected. Disconnected components complicates the search procedure for online queries by requiring restarts to achieve high accuracy. But by adding certain edges so that the graph is connected, it becomes possible to follow a single path beginning from any initial node and arriving at the nearest neighbor to q.
+
 → 如果图不连通，贪心算法可能永远搜不到最近邻
-A search path v1 . . . vm is monotonic if d(vi
-, q) >
-d(vi+1, q) for all i from 1 to m − 1. An MSN is a
-graph where the search path discovered by a “best-first”
-search, in which the neighbor of vi that is nearest to q
-is greedily selected（当前点所有邻居里挑距离 q 最近的点作为下一步）, is always monotonic.s nearest to q
-is greedily selected, is always monotonic. This property
-implies a monotonic path for every pair of nodes in the
-graph and that the graph is connected.
-> The minimum-edge MSN
-that guarantees exact NNS is believed to be the Delaunay triangulation [97]. But constructing a triangulation
-requires at least Ω(N⌈D/2⌉
-) time [55], impractical for
-large N and D. As a result, several approximate methods have been developed, but these necessarily sacrifice
-the search guarantee
+
+> A search path v1... vm is monotonic if d(vi, q) > d(vi+1, q) for all i from 1 to m − 1. An MSN is a graph where the search path discovered by a “best-first” search, in which the neighbor of vi that is nearest to q（当前点所有邻居里挑距离 q 最近的点作为下一步）, is always monotonic.
+
+>  This property implies a monotonic path for every pair of nodes in the graph and that the graph is connected. The minimum-edge MSN that guarantees exact NNS is believed to be the Delaunay triangulation. But constructing a triangulation requires at least Omega(N^ceil(D/2)) time, impractical for large N and D. As a result, several approximate methods have been developed, but these necessarily sacrifice the search guarantee
 
 Delaunay 三角剖分：
 
@@ -1032,107 +863,16 @@ Delaunay 三角剖分：
 
 RNG:
 
-两点 \(u,v\) 之间连边，当且仅当不存在任何第三个点 w，同时满足：
+两点 u,v 之间连边，当且仅当不存在任何第三个点 w，同时满足：
 
-\(d(u,w) < d(u,v),\quad d(v,w) < d(u,v)\)，即没有第三个点落在以 u、v 为球心、半径 d (u,v) 的两个球的交集里面
-
-xqueries, where q ∈/ S. The basic idea is to recursively
-select node neighbors that are nearest to q, starting
-from initial nodes, and add them into the top-k result
-set. The search complexity depends on the number of
-iterations before the result set converges. The search
-can start from multiple initial nodes, and if there are
-no more node neighbors to select, it can be restarted
-from new initial nodes [122].
-A KNNG can be exact or approximated with a technique which we refer to as “iterative refine”
-> Exact. An exact KNNG can be constructed by performing a brute force search N number of times, giving
-a total complexity of O(DN2
-).
-> Iterative Refine. An approximate KNNG can be obtained by iteratively refining an initial graph. We give
-two examples.
->– NN-Descent. The NN-Descent (KGraph) method [52]
-begins with a random KNNG and iteratively refines
-it by examining the neighbors of the neighbors of
-each node vi
-, replacing edges to vi with edges to
-these second-order neighbors that are closer. When
-the dataset is growth restricted17, then each iteration is expected to halve the radius around each
-node and its farthest neighbor.（半径减半是理想化假设，证明KNNG贪心建图算法迭代轮数是对数级） This property leads
-to fast convergence, with empirical times on the order of O(N2−ϵ
-) for 0 < ϵ < 1.
-
-迭代求精：用来快速构造近似 KNNG，图里的边不一定是严格真实最近邻，是近似的，牺牲召回换取建图速度
-
-思路:
-1. **初始化**：随机建一张 KNNG。每个节点随便挑 k 个点当邻居。
-2. **迭代求精**：
-对每个节点\(v_i\)，考察它**邻居的邻居（二阶邻居）**。
-如果某个二阶邻居离\(v_i\)更近，就把\(v_i\)原来的边替换成这个更近的点，更新邻接表。
-3. 不断循环迭代，图的质量持续提升，当本轮迭代没有任何节点的邻居列表发生更新时停止
-– EFANNA. Instead of starting from a random KNNG,
-EFANNA18 uses a forest of randomized k-d trees to
-build the initial KNNG. Doing so is shown to lead
-to higher recall and faster construction, as it can
-quickly converge to better local optima.
-
-先用多棵随机 k-d 树森林，快速给每个节点找一批候选近邻，用这批候选边，搭建初始 KNNG。之后同样执行迭代求精。
-
-#### 3.7.2 MSN如何建图
-> A KNNG is not guaranteed to be connected. Disconnected components complicates the search procedure
-for online queries by requiring restarts to achieve high
-accuracy [101,122]. But by adding certain edges so that
-the graph is connected, it becomes possible to follow a
-single path beginning from any initial node and arriving
-at the nearest neighbor to q.
-→ 如果图不连通，贪心算法可能永远搜不到最近邻
-A search path v1 . . . vm is monotonic if d(vi
-, q) >
-d(vi+1, q) for all i from 1 to m − 1. An MSN is a
-graph where the search path discovered by a “best-first”
-search, in which the neighbor of vi that is nearest to q
-is greedily selected（当前点所有邻居里挑距离 q 最近的点作为下一步）, is always monotonic.s nearest to q
-is greedily selected, is always monotonic. This property
-implies a monotonic path for every pair of nodes in the
-graph and that the graph is connected.
-> The minimum-edge MSN
-that guarantees exact NNS is believed to be the Delaunay triangulation [97]. But constructing a triangulation
-requires at least Ω(N⌈D/2⌉
-) time [55], impractical for
-large N and D. As a result, several approximate methods have been developed, but these necessarily sacrifice
-the search guarantee
-
-Delaunay 三角剖分：
-
-对点集做三角剖分（把空间切成三角形），满足空圆准则：D 维单纯形（2D 三角形，3D 四面体）的外接球内部不含别的点
-
-性质：是MSN，且边数很少，理论性质极强
-
-> In the early work by [51], an MSN is constructed
-in polynomial time by refining a sub-graph of the Delaunay triangulation called the relative neighborhood
-graph (RNG). The RNG itself is not monotone, but it can be
-constructed in O(DN2−o(1) log1−o(1) N) time under R
-D
-Euclidean distance [114]. But the N2−o(1) term makes
-this approach impractical for large N.
-
-RNG:
-
-两点 \(u,v\) 之间连边，当且仅当不存在任何第三个点 w，同时满足：
-
-\(d(u,w) < d(u,v),\quad d(v,w) < d(u,v)\)，即没有第三个点落在以 u、v 为球心、半径 d (u,v) 的两个球的交集里面
+d(u,w) < d(u,v), d(v,w) < d(u,v)，即没有第三个点落在以 u、v 为球心、半径 d (u,v) 的两个球的交集里面
 
 性质：RNG属于Delaunay，本身不是MSN，所以可以做refine构造MSN
 
-> Note：RNG、Delaunay 都属于理论工具，工业向量检索库几乎不会直接用 RNG 做索引。
+Note：RNG、Delaunay 都属于理论工具，工业向量检索库几乎不会直接用 RNG 做索引。
 
-> For InitializeGraph, some indexes begin with an empty
-graph [66], random graph [115], or approximate KNNG
-[58]. Simple graphs can be initialized quickly but more
-complex graphs may offer better quality.
-> For ChooseSourceTargetPair, one way is to select random pairs
-[66], while another is to designate a node as the source
-for all search trials [115,58]. We refer to these techniques as random and fixed trials, respectively
->
+> For InitializeGraph, some indexes begin with an empty graph, random graph, or approximate KNNG. Simple graphs can be initialized quickly but more complex graphs may offer better quality. For ChooseSourceTargetPair, one way is to select random pairs, while another is to designate a node as the source for all search trials. We refer to these techniques as random and fixed trials, respectively
+
 → 优化目标是保证贪心搜索的路径单调下降
 
 1. Random Trial
@@ -1142,26 +882,17 @@ for all search trials [115,58]. We refer to these techniques as random and fixe
 缺点：随机性强，可能大量采样到简单的点对，做很多无用的补边操作。
 
 ① FANNG
-> FANNG. In the Fast ANN Graph [66], graph con
-struction terminates after a fixed number of trials,
-e.g. 50N. The UpdateOutNeighbors routine adds an
-edge between t and the nearest node in the search
-path, p ∗ ∈ P, and then prunes out-neighbors of p ∗
-based on “occlusion” rules derived from the triangle inequality in order to limit out-degrees. The empir
-ical storage and search complexities are reported to
-be on the order of O(DN1−ϵ ).
+> FANNG. In the Fast ANN Graph, graph con struction terminates after a fixed number of trials, e.g. 50N. The UpdateOutNeighbors routine adds an edge between t and the nearest node in the search path, p ∗ ∈ P, and then prunes out-neighbors of p ∗ based on “occlusion” rules derived from the triangle inequality in order to limit out-degrees. The empir ical storage and search complexities are reported to be on the order of O(D * N^(1 - epsilon)).
 
-从 s 出发搜索邻居到 t 时得到的贪心搜索路径，如果走到p就断开，则p是路径里离目标点 t 最近的那个节点，连接 \(t \leftrightarrow p^*\)，补这条边，用来保证未来从 s 向 t 搜索时存在单调路径；
+从 s 出发搜索邻居到 t 时得到的贪心搜索路径，如果走到p就断开，则p是路径里离目标点 t 最近的那个节点，连接 t <-> p*，补这条边，用来保证未来从 s 向 t 搜索时存在单调路径；
 - **occlusion 遮挡剪枝**
 基于三角不等式定义的遮挡规则：
-> 
-> 如果节点 u 到 v 的距离 ≥ u 到 w 的距离 + w 到 v 的距离，就说 w **遮挡**了边 \(u \to v\)。
-> 作用：**限制每个节点的出度，防止图的边无限膨胀**。
+
+如果节点 u 到 v 的距离 ≥ u 到 w 的距离 + w 到 v 的距离，就说 w **遮挡**了边 u v。
+作用：**限制每个节点的出度，防止图的边无限膨胀**。
 
 2. Fixed Trial.
-> In fixed trial construction, all trials are
-conducted from a special designated source node, sometimes called the “navigating” node. This node also serves
-as the source for all online queries
+> In fixed trial construction, all trials are conducted from a special designated source node, sometimes called the “navigating” node. This node also serves as the source for all online queries
 即只要贪心搜索从 s₀出发，就可以沿着单调路径走到任意 t。
 
 ① NSG
@@ -1169,63 +900,53 @@ as the source for all online queries
 1. 初始图：approximate KNNG
 先用 NNDescent 这类方法，先构造一张近似 KNNG，作为基础图。
 2. 边筛选：lune membership（月牙判定）
- 两点 u、v 的月牙区域：两个球 \(B(u,d(u,v))\) 和 \(B(v,d(u,v))\) 的交集。
-> lune membership：判断点是否落在这个月牙内。即RNG的判定条件。
+ 两点 u、v 的月牙区域：两个球 B(u,d(u,v)) 和 B(v,d(u,v)) 的交集。
+lune membership：判断点是否落在这个月牙内。即RNG的判定条件。
 - 作用：筛选冗余边，保留几何上有意义的边，删掉多余边，控制节点出度。
-3. 叠加生成树 spanning tree：经过 fixed trial 补边之后，依然有可能存在部分节点，从导航节点\(s_0\)走不到，额外加一棵生成树，把所有孤岛连通起来。
+3. 叠加生成树 spanning tree：经过 fixed trial 补边之后，依然有可能存在部分节点，从导航节点s0走不到，额外加一棵生成树，把所有孤岛连通起来。
 
 ② Vamana → NSG 的简化、提速版本
 
 1. 初始图换成 random graph
 2. 边剪枝：，改用简单距离阈值（FANNG）
-> 图的质量理论上略弱，但建图速度大幅提升。
+图的质量理论上略弱，但建图速度大幅提升。
 
-#### 3.7.3 NSW
-> A graph is small-world if the length of its characteristic
-path grows in O (log N) [131]. A navigable graph is one
-where the length of the search path found by the best
-first search algorithm scales logarithmically with N. A graph that is both navigable and small-world (NSW)
-thus possesses a search complexity that is likely to be
-logarithmic, even in the worst case.
-> Note：
-> Small-world：图存在最短路径
-> Navigable：贪心搜索能找到一条短路径
-> 图可以是小世界，但贪心搜索很容易迷路 → 小世界 ≠ 可导航
+#### 3.8.3 NSW
+> A graph is small-world if the length of its characteristic path grows in O (log N). A navigable graph is one where the length of the search path found by the best first search algorithm scales logarithmically with N. A graph that is both navigable and small-world (NSW) thus possesses a search complexity that is likely to be logarithmic, even in the worst case.
 
-> NSW（HNSW的原型）. An NSW graph can be constructed using
-a procedure which we call one-shot refine and detailed in [89]. Nodes are sequentially inserted into
-the graph, and when a node is inserted, it is connected to its k nearest neighbors already in the graph.
+Note：
+
+Small-world：图存在最短路径
+
+Navigable：贪心搜索能找到一条短路径
+
+图可以是小世界，但贪心搜索很容易迷路 → 小世界 ≠ 可导航
+
+NSW（HNSW的原型）
+> An NSW graph can be constructed using a procedure which we call one-shot refine and detailed in. Nodes are sequentially inserted into the graph, and when a node is inserted, it is connected to its k nearest neighbors already in the graph.
 
 即节点一个接一个陆续加入图，新节点只在已经提前插入、已经在图里的旧节点里面找它的 k 近邻，建立边。
-> Note：没有任何trial和补边，只是小世界，并不是MSN，叫 NSW只是实践上贪心大概率能搜到，没有严格单调理论保证贪心路径单调
 
-#### 3.7.1 分层可导航小世界图（HNSW）
-> omization in order to restore logarithmic search. During node insertion, the
-node is assigned to all layers below a randomly selected maximum layer, chosen from an exponentially
-decaying distribution so that the size of each layer
-grows logarithmically from top to bottom. Within
-each layer, the node is connected to its neighbors
-following the NSW procedure, but where the outdegrees are bounded. Best-first search proceeds from
-the top-most layer.
+Note：没有任何trial和补边，只是小世界，并不是MSN，叫 NSW只是实践上贪心大概率能搜到，没有严格单调理论保证贪心路径单调
+
+#### 3.8.4 分层可导航小世界图（HNSW）
+> omization in order to restore logarithmic search. During node insertion, the node is assigned to all layers below a randomly selected maximum layer, chosen from an exponentially decaying distribution so that the size of each layer grows logarithmically from top to bottom. Within each layer, the node is connected to its neighbors following the NSW procedure, but where the outdegrees are bounded. Best-first search proceeds from the top-most layer.
 
 > Its graph-like structure takes inspiration from two different techniques: the probability skip list and Navigable Small World (NSW).
-
 
 Skip List
 
 > A skip list is an advanced data structure that combines the advantages of two traditional structures: the quick insertion capability of a linked list and the rapid retrieval characteristic of an array. It achieves this through its multi-layer architecture where the data is organized across multiple layers, with each layer containing a subset of the data points.
 
-> Starting from the bottom layer, which contains all data points, each succeeding layer skips some points and thus has fewer data points, ultimately the topmost layer will have the smallest number of data points.
-To search for a data point in a skip list, we start from the highest layer and go from left to right exploring each data point. At any point, if the queried value is greater than the current datapoint, we move back to the previous datapoint in the layer below and resume the search from left to right until we locate the exact point.
+> Starting from the bottom layer, which contains all data points, each succeeding layer skips some points and thus has fewer data points, ultimately the topmost layer will have the smallest number of data points. To search for a data point in a skip list, we start from the highest layer and go from left to right exploring each data point. At any point, if the queried value is greater than the current datapoint, we move back to the previous datapoint in the layer below and resume the search from left to right until we locate the exact point.
 
 原生跳表存储一维标量 key，底层是完整有序链表，精细度从上往下递增。
 
-Navigable Small World (NSW)
+> Navigable Small World (NSW)
 
-> Navigable Small World (NSW) is similar to a proximate graph where nodes are linked together based on how similar they are to each other. The greedy method is used to search for the nearest neighbor point.
-We always begin with a pre-defined entry point, which connects to multiple nearby nodes. We identify which of these nodes are the closest to our query vector and move there. This process iterates until there is no node closer to the query vector than the current one, serving as the stopping condition for the algorithm.
+> Navigable Small World (NSW) is similar to a proximate graph where nodes are linked together based on how similar they are to each other. The greedy method is used to search for the nearest neighbor point. We always begin with a pre-defined entry point, which connects to multiple nearby nodes. We identify which of these nodes are the closest to our query vector and move there. This process iterates until there is no node closer to the query vector than the current one, serving as the stopping condition for the algorithm.
 
-Back to HNSW:
+> Back to HNSW:
 
 > So, what happens in HNSW is that we take the motivation from the skip list, and it creates layers like the skip list. But for the connection between the data points, it makes a graph-like connection between the nodes. The nodes at each layer are connected not only to the current layer nodes but also to the nodes of the lower layers. The nodes at the top are very few and intensity increases when we go down to the lower layers. The last layer contains all the data points of the database.
 
@@ -1244,15 +965,13 @@ Note：如果一个节点分配最高层是 2，那它会同时存在 Layer0、L
 2. 直到当前节点的所有本层邻居，都没有比它离查询更近 → 局部极小
 3. 此时，才拿这个局部极小点作为入口，下降到下一层，重复贪心搜索
 
-### 3.7.3 HNSW的变体
+#### 3.8.5 HNSW 的变体
 
 > In HNSWFLAT, the raw vectors are stored as they are, while in HNSWSQ, the vectors are stored in a quantized form. Apart from this key difference in data storage, the overall process and methodology of indexing and searching are the same in both HNSWFLAT and HNSWSQ.
 
-### 3.7.4 NGT & Multi-Scale Tree Graph (MSTG) Algorithm
+#### 3.8.6 NGT & Multi-Scale Tree Graph（MSTG）Algorithm
 
-> Standard Inverted File Indexing (IVF) partitions a vector dataset into numerous clusters. However, a notable limitation is the substantial growth in index size for massive datasets, requiring the storage of many cluster representative vectors. The scalability of IVF is hindered by the significant memory overhead associated with this approach.
-> Multi-Stage Tree Graph (MSTG) is developed by MyScale and it overcomes this through a hierarchical design. Unlike IVF which has a single layer of cluster vectors, MSTG creates multiple layers, which means less persistent centroids in the memory. For example, if a dataset needs 10,000 cluster vectors in IVF, all 10,000 have to be stored, consuming substantial memory. In MSTG, using a 2-layer hierarchy of 100 clusters per layer, only 200 vectors need storage — the 100 top-layer vectors, and their 100 direct children.
-> MSTG combines the advantages of both tree and graph-based algorithms.
+> Standard Inverted File Indexing (IVF) partitions a vector dataset into numerous clusters. However, a notable limitation is the substantial growth in index size for massive datasets, requiring the storage of many cluster representative vectors. The scalability of IVF is hindered by the significant memory overhead associated with this approach. Multi-Stage Tree Graph (MSTG) is developed by MyScale and it overcomes this through a hierarchical design. Unlike IVF which has a single layer of cluster vectors, MSTG creates multiple layers, which means less persistent centroids in the memory. For example, if a dataset needs 10,000 cluster vectors in IVF, all 10,000 have to be stored, consuming substantial memory. In MSTG, using a 2-layer hierarchy of 100 clusters per layer, only 200 vectors need storage — the 100 top-layer vectors, and their 100 direct children. MSTG combines the advantages of both tree and graph-based algorithms.
 
 NGT:
 依旧上疏下密（树状层级聚类）
@@ -1262,13 +981,12 @@ NGT:
 - 单纯层次聚类树有个经典硬伤：
 检索的时候，一旦顶层选的分支选错了，目标向量在另一个子分支，就再也找不回来了 → 召回率暴跌。
 
-**MSTG 的改进：在最底层叶子节点里面维护一张近邻图。**
+MSTG 的改进：在最底层叶子节点里面维护一张近邻图。
 
-1. **树部分（导航层，上层所有层级）**：多层 K-means 质心构成树，用来快速粗定位，把查询快速缩小到一小块空间。
-2. **图部分（叶子层）**：树的叶子节点里面存放原始向量，并且**这些原始向量之间构建近邻图**。
+1. 树部分（导航层，上层所有层级）：多层 K-means 质心构成树，用来快速粗定位，把查询快速缩小到一小块空间。
+2. 图部分（叶子层）：树的叶子节点里面存放原始向量，并且这些原始向量之间构建近邻图。
    - 当顺着树落到叶子区域之后，不是只在这个叶子内部暴力遍历；
-   - 可以沿着图的边，**跨叶子做局部游走**，能跳到相邻叶子节点的向量，弥补树结构 “一旦走错分支就卡死” 的缺陷。
-  
+   - 可以沿着图的边，跨叶子做局部游走，能跳到相邻叶子节点的向量，弥补树结构 “一旦走错分支就卡死” 的缺陷。
 
 > It builds fast, searches fast, and remains fast and accurate under different filtered search ratios while being resource and cost-efficient.
 
@@ -1278,92 +996,59 @@ NGT:
 
 ---
 Note：
-> Query Accuracy and Performance. The search capability of a VDBMS is assessed by evaluating query accuracy and performance.
-> To evaluate accuracy, precision and recall are often
-used. Precision is defined as the ratio between the number of relevant results in the result set over the size of
-the result set, and recall is defined as the ratio between
-the number of retrieved relevant results over all possible
-relevant results.
-> To evaluate performance, latency and throughput
-are used. Latency is the amount of time it takes for a
-VDBMS to answer a query once it is received, while
-throughput is the number of queries that are answered
-per unit time, often reported as queries per second.
->
-> The modern belief is that even a fractional power of
-N query complexity cannot be obtained unless storage
-cost is worse than N O(1)DO(1)
+> Query Accuracy and Performance. The search capability of a VDBMS is assessed by evaluating query accuracy and performance. To evaluate accuracy, precision and recall are often used. Precision is defined as the ratio between the number of relevant results in the result set over the size of the result set, and recall is defined as the ratio between the number of retrieved relevant results over all possible relevant results. To evaluate performance, latency and throughput are used. Latency is the amount of time it takes for a VDBMS to answer a query once it is received, while throughput is the number of queries that are answered per unit time, often reported as queries per second.
 
-多项式存储 Polynomial Storage:存储量是 N 和 D 的多项式函数，记作 \(poly(N,D)=N^{O(1)}D^{O(1)}\)。
+> The modern belief is that even a fractional power of N query complexity cannot be obtained unless storage cost is worse than N^O(1) * D^O(1)
+
+多项式存储 Polynomial Storage:存储量是 N 和 D 的多项式函数，记作 poly(N,D)=N^O(1)D^O(1)。
 
 HNSW / IVF可以通过细化索引,保留更多边/聚类中心来提高召回率,但这类索引仍然属于多项式存储,哪怕把它调得再精细，也无法拿到理论上的分数幂亚线性查询复杂度。只是工程平均速度变快，最坏情况依然可能接近 O (N)。
 
 ## 4. 相似度度量
 
-Basic Scores
+> Basic Scores
 
-> Several similarity scores are commonly supported by VDBMSs
-> Similarity is often measured via distance in practice, with values closer to 0 indicating greater similarity. Distance functions obey the metric axioms of identity
-> Type	                      Score Metric	      Complexity	 Range
-  Sim.（Similarity 相似度）	 Inner Prod. 内积	         O(D)	      R（全体实数）
-  Sim.	                   Cosine 余弦相似度	         O(D)	      [−1,1]
-  Dist.（Distance 距离）	    Minkowski 闵可夫斯基距离	O(D)	      R+（非负实数）
-  Dist.	                   Mahalanobis 马氏距离	      O(D2+O(1))	R+
-  Dist.	                   Hamming 汉明距离	         O(D)	      N（自然数，0,1,2…）
+> Several similarity scores are commonly supported by VDBMSs. Similarity is often measured via distance in practice, with values closer to 0 indicating greater similarity. Distance functions obey the metric axioms of identity.
 
-Definition 1 (Hamming) d(a, b) = P n i=1 δaibi
+| 类型 | 度量 | 复杂度 | 取值范围 |
+| --- | --- | --- | --- |
+| Sim.（Similarity，相似度） | Inner Product（内积） | O(D) | R（全体实数） |
+| Sim. | Cosine（余弦相似度） | O(D) | [-1, 1] |
+| Dist.（Distance，距离） | Minkowski（闵可夫斯基距离） | O(D) | R+（非负实数） |
+| Dist. | Mahalanobis（马氏距离） | O(D^2 + O(1)) | R+ |
+| Dist. | Hamming（汉明距离） | O(D) | N（自然数，0, 1, 2…） |
+
+> Definition 1 (Hamming): d(a, b) = sum(i = 1..n, indicator(ai != bi))
 
 > The Hamming distance counts the number of differing dimensions between vectors a and b
 
-Definition 2 (Inner Product) f(a, b) = P n i=1 aibi
-> Note：The dot product projects a onto b and scales the result by the magnitude of b. The scaling can lead to unintuitive consequences. For example, two large identical vectors have a larger dot product compared to two small identical vectors, thus they would be considered “more similar” under this definition. If magnitude is not important, a and b can be normalized by ˆa = a/∥a∥ and bˆ = b/∥b∥ so that they
-possess unit magnitudes.
+> Definition 2 (Inner Product): f(a, b) = sum(i = 1..n, ai * bi)
 
-Definition 3 (Cosine Similarity) f(a, b) = ⟨ˆa, bˆ⟩or f(a, b) = ∥
-⟨
-a
-a
-∥∥
-,b
-b
-⟩
-∥
+> Note：The dot product projects a onto b and scales the result by the magnitude of b. The scaling can lead to unintuitive consequences. For example, two large identical vectors have a larger dot product compared to two small identical vectors, thus they would be considered “more similar” under this definition. If magnitude is not important, a and b can be normalized by a_hat = a / ||a|| and b_hat = b / ||b|| so that they possess unit magnitudes.
 
-Definition 4 (Minkowski) The p-order Minkowski
-distance is d(a, b) = (P n
-i=1 |ai − bi
-|
-p
-)
-1/p
-or d(a, b) = ∥a − b∥p
+> Definition 3 (Cosine Similarity): f(a, b) = dot(a, b) / (||a|| * ||b||)
 
-Definition 5 (Mahalanobis) For any positive semidefinite matrix M, d(a, b) = p (a − b)⊤M(a − b).
+> Definition 4 (Minkowski): d(a, b) = (sum(i = 1..n, |ai - bi|^p))^(1/p) = ||a - b||p
 
-> Another generalization of Euclidean distance can be
-obtained by applying a linear transformation over the
-vector space in order to adjust the relative proximities
-of the feature vectors. The distance of two vectors in
-the transformed space can be calculated using the Mahalanobis formula.
+> Definition 5 (Mahalanobis): For any positive semidefinite matrix M, d(a, b) = sqrt((a - b)^T * M * (a - b))
 
-> Note: 闵可夫斯基距离是欧氏距离的广义形式；而马氏距离又是欧氏距离的另一种广义化思路，先对向量空间做线性变换，再在新空间上算欧氏距离
-> 
-> Aside from these basic scores, some VDBMSs also support aggregate scores for applications like multi-vector search [129]. There is also emerging work on learned scores [25,142,93], but these are not available in commercial systems
+> Another generalization of Euclidean distance can be obtained by applying a linear transformation over the vector space in order to adjust the relative proximities of the feature vectors. The distance of two vectors in the transformed space can be calculated using the Mahalanobis formula.
 
-Aggregate Scores
+Note: 闵可夫斯基距离是欧氏距离的广义形式；而马氏距离又是欧氏距离的另一种广义化思路，先对向量空间做线性变换，再在新空间上算欧氏距离
+
+> Aside from these basic scores, some VDBMSs also support aggregate scores for applications like multi-vector search. There is also emerging work on learned scores, but these are not available in commercial systems
+
+> Aggregate Scores
 
 **aggregate scores 聚合得分 + multi-vector search 多向量检索**
  → 一个实体对应一组多个向量。
-> One way of approaching this problem is
-to use an aggregate score that defines how to combine
-individual scores f(x1, q). . . f(xm, q) to yield a single
-value that can be compared.
+> One way of approaching this problem is to use an aggregate score that defines how to combine individual scores f(x1, q)... f(xm, q) to yield a single value that can be compared.
 
 例子：一张图片，拆成多个局部区域，每个区域提取一个向量；或者一段长文本，分成多个 chunk，得到一组向量。
 
 把这一组向量各自的相似度合并、聚合（比如取最大值、平均值、加权求和）得到一个最终分数，即聚合得分。
 
-Learned Scores
+> Learned Scores
 
 **learned scores 学习型相似度得分**
 传统指标是固定数学公式，人工定义好的，不随数据分布自适应。而 learned scores：用机器学习模型自己学到的相似度度量。
@@ -1371,11 +1056,9 @@ Learned Scores
 - 优点：适配特定任务，匹配效果往往更好
 - 缺点：计算开销大、推理慢，难以构建索引做 ANN 近似检索
 
-> **Q：之前讨论的那些索引算法都是用的距离，可以搭配不同的相似度度量使用吗？**
->
-> 大多数向量近似检索索引算法理论上支持搭配多种相似度 / 距离度量，但并非可以无限制随意替换。索引的空间划分、聚类、哈希、图构建逻辑依赖度量的数学性质，因此切换相似度度量时存在明确约束。
+**Q：之前讨论的那些索引算法都是用的距离，可以搭配不同的相似度度量使用吗？**
 
-### 4.1 基于空间划分 / 聚类的索引
+大多数向量近似检索索引算法理论上支持搭配多种相似度 / 距离度量，但并非可以无限制随意替换。索引的空间划分、聚类、哈希、图构建逻辑依赖度量的数学性质，因此切换相似度度量时存在明确约束。
 
 IVF、DBSCAN、KD 树（Annoy）
 
@@ -1385,9 +1068,9 @@ Annoy 本质是比较向量方向 / 空间距，原生支持余弦相似度，�
 
 IVF / DBSCAN 如果想改成余弦相似度，需要先把向量归一化。
 
-> **原理**：向量归一化 `||v|| = 1`，`dist_euclid` 平方 = `2 * (1 - cosθ)`。
->
-> 归一化后，余弦越大，欧氏距离越小，排序结果完全一致。
+**原理**：向量归一化 `||v|| = 1`，`dist_euclid` 平方 = `2 * (1 - cosθ)`。
+
+归一化后，余弦越大，欧氏距离越小，排序结果完全一致。
 
 ### 4.2 LSH
 
@@ -1411,4 +1094,4 @@ HNSW 算法本身不绑定距离公式，属于通用框架。
 
 PQ 乘积量化是向量压缩，压缩后计算的是估算距离，估算器需要和你选用的相似度匹配，可以用于欧氏、归一化后的余弦。
 
-硬件加速和现有向量数据库详细介绍见原文
+## 硬件加速和现有向量数据库详细介绍见原文
